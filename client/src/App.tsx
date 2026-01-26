@@ -202,7 +202,8 @@ function AuthenticatedApp() {
 }
 
 function App() {
-    const basename = import.meta.env.PROD ? '/secrets/workflow' : '/';
+    // Railway 배포: basename은 항상 '/'
+    const basename = '/';
 
     return (
         <RepositoryProvider>
