@@ -84,7 +84,7 @@ export const useMemberStore = create<MemberState>((set, get) => ({
 
     try {
       // Use Case를 통해 유효성 검증 후 업데이트
-      await updateMemberUseCase.execute({ id, data });
+      await updateMemberUseCase.execute({ memberId: id, data });
     } catch (error) {
       // Rollback on error
       const message = (error as Error).message;
@@ -112,7 +112,7 @@ export const useMemberStore = create<MemberState>((set, get) => ({
       const taskState = useTaskStore.getState();
       const updatedTasks = taskState.tasks.map(task => {
         if (task.assignee?.id === id) {
-          return { ...task, assignee: null, assigneeId: null };
+          return { ...task, assignee: undefined, assigneeId: undefined };
         }
         // assignees 배열에서도 제거
         if (task.assignees?.some(a => a.id === id)) {

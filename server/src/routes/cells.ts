@@ -28,7 +28,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
 router.get('/my', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const cellService = getCellService();
-    const cells = await cellService.getCellsByMemberId(req.user!.id);
+    const cells = await cellService.getCellsByMemberId(req.member!.id);
     res.json(cells);
   } catch (error) {
     const { statusCode, body } = handleError(error);

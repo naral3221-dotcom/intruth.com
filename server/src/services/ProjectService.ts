@@ -60,11 +60,9 @@ export class ProjectService {
     };
 
     if (params?.status) {
-      where.status = params.status as Prisma.EnumProjectStatusFilter;
+      where.status = params.status;
     }
-    if (params?.teamId) {
-      where.teams = { some: { id: params.teamId } };
-    }
+    // Note: teamId filtering removed - no Team model in schema
 
     return this.prisma.project.findMany({
       where,
@@ -82,7 +80,6 @@ export class ProjectService {
       include: {
         ...this.defaultInclude,
         labels: true,
-        teams: true,
         members: {
           include: {
             member: {
@@ -128,14 +125,7 @@ export class ProjectService {
             role: 'OWNER',
           },
         },
-        // 팀 연결
-        ...(input.teamIds && input.teamIds.length > 0
-          ? {
-              teams: {
-                connect: input.teamIds.map((id) => ({ id })),
-              },
-            }
-          : {}),
+        // Note: team connection removed - no Team model in schema
       },
       include: this.defaultInclude,
     });
@@ -161,14 +151,7 @@ export class ProjectService {
         status: input.status,
         startDate: input.startDate,
         endDate: input.endDate,
-        // 팀 업데이트
-        ...(input.teamIds !== undefined
-          ? {
-              teams: {
-                set: input.teamIds.map((teamId) => ({ id: teamId })),
-              },
-            }
-          : {}),
+        // Note: team update removed - no Team model in schema
       },
       include: this.defaultInclude,
     });

@@ -63,7 +63,7 @@ export const deleteTaskUseCase = new DeleteTaskUseCase(taskRepository);
 export const updateTaskStatusUseCase = new UpdateTaskStatusUseCase(taskRepository);
 
 // Project Use Case 인스턴스
-export const getProjectsUseCase = new GetProjectsUseCase(projectRepository);
+export const getProjectsUseCase = new GetProjectsUseCase(projectRepository, taskRepository);
 export const createProjectUseCase = new CreateProjectUseCase(projectRepository);
 export const updateProjectUseCase = new UpdateProjectUseCase(projectRepository);
 export const deleteProjectUseCase = new DeleteProjectUseCase(projectRepository);

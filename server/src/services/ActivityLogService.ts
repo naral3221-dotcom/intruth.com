@@ -24,7 +24,7 @@ export class ActivityLogService {
         taskId: input.taskId,
         memberId: input.memberId,
         action: input.action,
-        details: input.details,
+        details: input.details ? JSON.stringify(input.details) : null,
       },
       include: {
         member: {
@@ -53,7 +53,7 @@ export class ActivityLogService {
         taskId: input.taskId,
         memberId: input.memberId,
         action: input.action,
-        details: input.details,
+        details: input.details ? JSON.stringify(input.details) : null,
       },
     });
   }

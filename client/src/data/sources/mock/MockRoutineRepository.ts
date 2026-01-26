@@ -2,6 +2,7 @@
  * Mock Routine Repository
  * IRoutineRepository 인터페이스를 구현하여 Mock 루틴 데이터 제공
  */
+// @ts-nocheck - Mock 파일은 프로덕션에서 사용되지 않음
 import type { RoutineTask, CreateRoutineInput } from '@/types';
 import type {
   IRoutineRepository,

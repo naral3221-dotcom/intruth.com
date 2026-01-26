@@ -1,5 +1,4 @@
 import { Router, Response } from 'express';
-import { TaskStatus } from '@prisma/client';
 import { authenticate, checkPermission, AuthRequest } from '../middleware/auth.js';
 import { getTaskService } from '../di/container.js';
 import { handleError, NotFoundError } from '../shared/errors.js';
@@ -14,7 +13,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
 
     const tasks = await taskService.findAll({
       projectId: projectId as string,
-      status: status as TaskStatus,
+      status: status as string,
       assigneeId: assigneeId as string,
     });
 
@@ -101,7 +100,7 @@ router.patch('/:id/status', authenticate, async (req: AuthRequest, res: Response
 
     const task = await taskService.updateStatus(
       req.params.id,
-      { status: status as TaskStatus, order },
+      { status: status as string, order },
       req.member!.id
     );
 

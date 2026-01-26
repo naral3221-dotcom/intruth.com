@@ -2,7 +2,7 @@
  * Task Service
  * 업무 관련 비즈니스 로직
  */
-import { PrismaClient, TaskStatus, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { ActivityLogService } from './ActivityLogService.js';
 import { NotFoundError, ValidationError } from '../shared/errors.js';
 
@@ -33,13 +33,13 @@ export interface UpdateTaskInput {
 }
 
 export interface UpdateTaskStatusInput {
-  status: TaskStatus;
+  status: string;
   order?: number;
 }
 
 export interface TaskListParams {
   projectId?: string;
-  status?: TaskStatus;
+  status?: string;
   assigneeId?: string;
 }
 

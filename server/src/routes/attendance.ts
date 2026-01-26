@@ -79,7 +79,7 @@ router.post('/check', authenticate, async (req: AuthRequest, res: Response): Pro
         meetingType,
         attendances,
       },
-      req.user!.id
+      req.member!.id
     );
 
     res.status(201).json(result);
@@ -93,7 +93,7 @@ router.post('/check', authenticate, async (req: AuthRequest, res: Response): Pro
 router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const attendanceService = getAttendanceService();
-    const result = await attendanceService.update(req.params.id, req.body, req.user!.id);
+    const result = await attendanceService.update(req.params.id, req.body, req.member!.id);
     res.json(result);
   } catch (error) {
     const { statusCode, body } = handleError(error);

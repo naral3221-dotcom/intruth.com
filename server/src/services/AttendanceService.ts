@@ -364,25 +364,35 @@ export class AttendanceService {
   /**
    * 주간 통계 조회
    */
-  getWeeklyStats = this.statsService.getWeeklyStats.bind(this.statsService);
+  getWeeklyStats(...args: Parameters<AttendanceStatsService['getWeeklyStats']>) {
+    return this.statsService.getWeeklyStats(...args);
+  }
 
   /**
    * 월간 통계 조회
    */
-  getMonthlyStats = this.statsService.getMonthlyStats.bind(this.statsService);
+  getMonthlyStats(...args: Parameters<AttendanceStatsService['getMonthlyStats']>) {
+    return this.statsService.getMonthlyStats(...args);
+  }
 
   /**
    * 개인 출석 이력 조회
    */
-  getMemberHistory = this.statsService.getMemberHistory.bind(this.statsService);
+  getMemberHistory(...args: Parameters<AttendanceStatsService['getMemberHistory']>) {
+    return this.statsService.getMemberHistory(...args);
+  }
 
   /**
    * 전체 요약 조회 (대시보드용)
    */
-  getSummary = this.statsService.getSummary.bind(this.statsService);
+  getSummary() {
+    return this.statsService.getSummary();
+  }
 
   /**
    * 연속 결석자 목록 조회
    */
-  getAbsentees = this.statsService.getAbsentees.bind(this.statsService);
+  getAbsentees(...args: Parameters<AttendanceStatsService['getAbsentees']>) {
+    return this.statsService.getAbsentees(...args);
+  }
 }

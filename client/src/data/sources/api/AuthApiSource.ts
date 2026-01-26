@@ -42,7 +42,7 @@ export class AuthApiSource {
         avatarUrl: response.user.avatarUrl,
         department: response.user.department,
         position: response.user.position,
-        userRole: response.user.role,
+        userRole: response.user.role as 'admin' | 'member',
         mustChangePassword: response.mustChangePassword,
       },
       mustChangePassword: response.mustChangePassword,
@@ -78,7 +78,7 @@ export class AuthApiSource {
       avatarUrl: response.avatarUrl,
       department: response.department,
       position: response.position,
-      userRole: response.role,
+      userRole: response.role as 'admin' | 'member',
       mustChangePassword: response.mustChangePassword,
     };
   }

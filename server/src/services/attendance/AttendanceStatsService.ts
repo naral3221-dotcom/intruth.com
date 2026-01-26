@@ -358,11 +358,13 @@ export class AttendanceStatsService {
     // 총 셀 수
     const totalCells = await this.prisma.cell.count({ where: { isActive: true } });
 
-    // 총 활성 멤버 수
-    const totalMembers = await this.prisma.cellMember.count({
+    // 총 활성 멤버 수 (중복 제거)
+    const uniqueMembers = await this.prisma.cellMember.findMany({
       where: { isActive: true },
       distinct: ['memberId'],
+      select: { memberId: true },
     });
+    const totalMembers = uniqueMembers.length;
 
     // 이번 주 통계
     const thisWeekStats = await this.getWeeklyStats({ weekStart: thisWeekStart });

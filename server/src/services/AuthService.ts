@@ -25,7 +25,7 @@ export interface LoginResult {
     role: {
       id: string;
       name: string;
-      permissions: string[];
+      permissions: string; // JSON string stored in DB
     } | null;
   };
 }
@@ -40,7 +40,7 @@ export interface MemberProfile {
   role: {
     id: string;
     name: string;
-    permissions: string[];
+    permissions: string; // JSON string stored in DB
   } | null;
 }
 

@@ -2,7 +2,7 @@
  * Dashboard Service
  * 대시보드 관련 비즈니스 로직
  */
-import { PrismaClient, TaskStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 // Output DTOs
 export interface DashboardSummary {

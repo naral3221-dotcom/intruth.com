@@ -88,7 +88,7 @@ export const useTeamStore = create<TeamState>((set, get) => ({
 
     try {
       // Use Case를 통해 유효성 검증 후 업데이트
-      await updateTeamUseCase.execute({ id, data });
+      await updateTeamUseCase.execute({ teamId: id, data });
     } catch (error) {
       // Rollback
       const message = (error as Error).message;
@@ -162,7 +162,7 @@ export const useTeamStore = create<TeamState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       // Use Case를 통해 유효성 검증 후 멤버 추가
-      const newMember = await addTeamMemberUseCase.execute({ teamId, memberId, role });
+      const newMember = await addTeamMemberUseCase.execute({ teamId, data: { memberId, role } });
       set((state) => {
         const newTeamMembers = new Map(state.teamMembers);
         const currentMembers = newTeamMembers.get(teamId) || [];

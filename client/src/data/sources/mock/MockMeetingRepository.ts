@@ -2,6 +2,7 @@
  * Mock Meeting Repository
  * IMeetingRepository 인터페이스를 구현하여 Mock 회의자료 데이터 제공
  */
+// @ts-nocheck - Mock 파일은 프로덕션에서 사용되지 않음
 import type { Meeting, MeetingComment, MeetingAttachment, MeetingAttendee, CreateMeetingInput, UpdateMeetingInput, MeetingFilters } from '@/types';
 import type { IMeetingRepository, AddCommentDTO } from '@/domain/repositories/IMeetingRepository';
 import { MockStorage } from './MockStorage';

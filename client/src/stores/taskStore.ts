@@ -131,7 +131,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     try {
       // Use Case를 통해 유효성 검증 후 업데이트
-      const updatedTask = await updateTaskUseCase.execute({ id, data });
+      const updatedTask = await updateTaskUseCase.execute({ taskId: id, data });
 
       // 서버 응답으로 store 업데이트 (정확한 데이터 동기화)
       set((state) => ({
@@ -192,7 +192,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     try {
       // Use Case를 통해 상태 업데이트
-      const updatedTask = await updateTaskStatusUseCase.execute({ id, status });
+      const updatedTask = await updateTaskStatusUseCase.execute({ taskId: id, status });
 
       // 서버 응답으로 해당 task 업데이트 (정확한 데이터 동기화)
       set((state) => ({

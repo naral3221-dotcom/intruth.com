@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Project } from '@/types';
+import { projectRepository } from '@/di/storeRepositories';
 import {
   createProjectUseCase,
   updateProjectUseCase,
@@ -99,7 +100,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       // Use Case를 통해 유효성 검증 후 업데이트
-      const updatedProject = await updateProjectUseCase.execute({ id, data });
+      const updatedProject = await updateProjectUseCase.execute({ projectId: id, data });
 
       // API에서 반환된 최신 데이터로 상태 업데이트
       set((state) => ({

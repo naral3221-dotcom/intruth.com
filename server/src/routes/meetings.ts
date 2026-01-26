@@ -105,7 +105,7 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promis
       },
       {
         id: req.member!.id,
-        permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+        permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
       }
     );
 
@@ -123,7 +123,7 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response): Pro
 
     await meetingService.delete(Number(req.params.id), {
       id: req.member!.id,
-      permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+      permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
     });
 
     res.status(204).send();
@@ -171,7 +171,7 @@ router.delete('/:id/attachments/:attachmentId', authenticate, async (req: AuthRe
       Number(req.params.attachmentId),
       {
         id: req.member!.id,
-        permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+        permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
       }
     );
 
@@ -220,7 +220,7 @@ router.delete('/:id/comments/:commentId', authenticate, async (req: AuthRequest,
 
     await meetingService.deleteComment(Number(req.params.commentId), {
       id: req.member!.id,
-      permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+      permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
     });
 
     res.status(204).send();
@@ -255,7 +255,7 @@ router.post('/:id/agendas', authenticate, async (req: AuthRequest, res: Response
       { title, description, duration, presenter, order },
       {
         id: req.member!.id,
-        permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+        permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
       }
     );
 
@@ -277,7 +277,7 @@ router.put('/:id/agendas/:agendaId', authenticate, async (req: AuthRequest, res:
       { title, description, duration, presenter, order, status },
       {
         id: req.member!.id,
-        permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+        permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
       }
     );
 
@@ -295,7 +295,7 @@ router.delete('/:id/agendas/:agendaId', authenticate, async (req: AuthRequest, r
 
     await meetingService.deleteAgenda(Number(req.params.agendaId), {
       id: req.member!.id,
-      permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+      permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
     });
 
     res.status(204).send();
@@ -316,7 +316,7 @@ router.put('/:id/agendas/reorder', authenticate, async (req: AuthRequest, res: R
       agendaIds.map(Number),
       {
         id: req.member!.id,
-        permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+        permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
       }
     );
 
@@ -358,7 +358,7 @@ router.post('/:id/action-items', authenticate, async (req: AuthRequest, res: Res
       },
       {
         id: req.member!.id,
-        permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+        permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
       }
     );
 
@@ -387,7 +387,7 @@ router.put('/:id/action-items/:actionItemId', authenticate, async (req: AuthRequ
       },
       {
         id: req.member!.id,
-        permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+        permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
       }
     );
 
@@ -405,7 +405,7 @@ router.delete('/:id/action-items/:actionItemId', authenticate, async (req: AuthR
 
     await meetingService.deleteActionItem(Number(req.params.actionItemId), {
       id: req.member!.id,
-      permissions: req.member!.permissions as Record<string, Record<string, boolean>> | undefined,
+      permissions: req.member!.permissions as unknown as Record<string, Record<string, boolean>> | undefined,
     });
 
     res.status(204).send();

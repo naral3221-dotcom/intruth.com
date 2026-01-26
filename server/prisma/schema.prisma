@@ -21,17 +21,20 @@ model Role {
 }
 
 model Member {
-  id          String   @id @default(uuid())
-  gnuboardId  String?  @unique @map("gnuboard_id")
-  email       String   @unique
-  password    String?
-  name        String
-  avatarUrl   String?  @map("avatar_url")
-  roleId      String   @map("role_id")
-  department  String?
-  position    String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  gnuboardId         String?  @unique @map("gnuboard_id")
+  username           String?  @unique
+  email              String   @unique
+  password           String?
+  name               String
+  avatarUrl          String?  @map("avatar_url")
+  roleId             String   @map("role_id")
+  department         String?
+  position           String?
+  isActive           Boolean  @default(true) @map("is_active")
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   role              Role              @relation(fields: [roleId], references: [id])
   ownedProjects     Project[]         @relation("ProjectOwner")

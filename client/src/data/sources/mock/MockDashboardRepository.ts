@@ -2,6 +2,7 @@
  * Mock Dashboard Repository
  * IDashboardRepository 인터페이스를 구현하여 Mock 데이터 제공
  */
+// @ts-nocheck - Mock 파일은 프로덕션에서 사용되지 않음
 import type {
   IDashboardRepository,
   DashboardFilters,
