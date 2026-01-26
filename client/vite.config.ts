@@ -10,8 +10,8 @@ export default defineConfig(({ mode }) => ({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  // 개발 환경에서는 '/', 프로덕션에서는 '/secrets/workflow/'
-  base: mode === 'production' ? '/secrets/workflow/' : '/',
+  // VITE_BASE_PATH 환경변수로 base path 설정 (Railway: '/', 기존 서버: '/secrets/workflow/')
+  base: process.env.VITE_BASE_PATH || (mode === 'production' ? '/secrets/workflow/' : '/'),
   server: {
     port: 5173,
     proxy: {

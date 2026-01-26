@@ -98,11 +98,19 @@ if (process.env.NODE_ENV === 'production') {
     // 정적 파일 서빙
     app.use(express.static(clientDistPath));
 
-    // SPA fallback: API가 아닌 모든 요청을 index.html로
+    // SPA fallback: API와 정적 파일이 아닌 요청만 index.html로
     app.get('*', (req, res, next) => {
+      // API 요청은 스킵
       if (req.path.startsWith('/api')) {
         return next();
       }
+
+      // 정적 파일 확장자는 404 반환 (파일이 없는 경우)
+      const staticExtensions = ['.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot', '.map'];
+      if (staticExtensions.some(ext => req.path.endsWith(ext))) {
+        return res.status(404).send('Not found');
+      }
+
       res.sendFile(path.join(clientDistPath, 'index.html'));
     });
   }
