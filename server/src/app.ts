@@ -1,6 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // DI Container 초기화 (라우트 import 전에 실행)
 import { container } from './di/container.js';
@@ -23,7 +27,7 @@ app.use(cors());
 app.use(express.json());
 
 // 정적 파일 서빙 (첨부파일)
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -43,7 +47,10 @@ app.get('/api/health', (req, res) => {
 
 // Production: 클라이언트 정적 파일 서빙
 if (process.env.NODE_ENV === 'production') {
-  const clientDistPath = path.join(process.cwd(), '../client/dist');
+  // __dirname은 server/dist (컴파일된 위치)
+  // 클라이언트는 ../client/dist에 위치
+  const clientDistPath = path.resolve(__dirname, '../../client/dist');
+  console.log('[Production] Serving static files from:', clientDistPath);
 
   // 정적 파일 서빙
   app.use(express.static(clientDistPath));

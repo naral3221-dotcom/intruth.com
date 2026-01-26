@@ -1,6 +1,7 @@
 {
   "name": "workflow-server",
   "version": "1.0.0",
+  "type": "module",
   "description": "Workflow Management System Backend",
   "main": "dist/server.js",
   "scripts": {
