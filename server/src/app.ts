@@ -1,10 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// 디버깅: 현재 환경 정보 출력
+console.log('[Debug] __dirname:', __dirname);
+console.log('[Debug] process.cwd():', process.cwd());
+console.log('[Debug] NODE_ENV:', process.env.NODE_ENV);
 
 // DI Container 초기화 (라우트 import 전에 실행)
 import { container } from './di/container.js';
@@ -47,21 +53,59 @@ app.get('/api/health', (req, res) => {
 
 // Production: 클라이언트 정적 파일 서빙
 if (process.env.NODE_ENV === 'production') {
-  // __dirname은 server/dist (컴파일된 위치)
-  // 클라이언트는 ../client/dist에 위치
-  const clientDistPath = path.resolve(__dirname, '../../client/dist');
-  console.log('[Production] Serving static files from:', clientDistPath);
+  // 가능한 클라이언트 경로들 시도
+  const possiblePaths = [
+    path.resolve(__dirname, '../../client/dist'),  // server/dist에서 상대경로
+    path.resolve(process.cwd(), 'client/dist'),    // 루트에서 상대경로
+    path.resolve(process.cwd(), '../client/dist'), // server에서 상대경로
+    '/app/client/dist',                            // Railway 절대경로
+  ];
 
-  // 정적 파일 서빙
-  app.use(express.static(clientDistPath));
+  let clientDistPath = '';
 
-  // SPA fallback: API가 아닌 모든 요청을 index.html로
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) {
-      return next();
+  for (const p of possiblePaths) {
+    console.log(`[Production] Checking path: ${p}`);
+    if (fs.existsSync(p)) {
+      const files = fs.readdirSync(p);
+      console.log(`[Production] Found at ${p}, files:`, files.slice(0, 5));
+      if (files.includes('index.html')) {
+        clientDistPath = p;
+        break;
+      }
+    } else {
+      console.log(`[Production] Path does not exist: ${p}`);
     }
-    res.sendFile(path.join(clientDistPath, 'index.html'));
-  });
+  }
+
+  if (!clientDistPath) {
+    console.error('[Production] ERROR: Could not find client dist folder!');
+    console.log('[Production] Listing root directories...');
+    try {
+      const rootFiles = fs.readdirSync(process.cwd());
+      console.log('[Production] Files in cwd:', rootFiles);
+
+      // app 디렉토리 확인
+      if (fs.existsSync('/app')) {
+        const appFiles = fs.readdirSync('/app');
+        console.log('[Production] Files in /app:', appFiles);
+      }
+    } catch (e) {
+      console.error('[Production] Error listing directories:', e);
+    }
+  } else {
+    console.log('[Production] Serving static files from:', clientDistPath);
+
+    // 정적 파일 서빙
+    app.use(express.static(clientDistPath));
+
+    // SPA fallback: API가 아닌 모든 요청을 index.html로
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      res.sendFile(path.join(clientDistPath, 'index.html'));
+    });
+  }
 }
 
 // Error handler
