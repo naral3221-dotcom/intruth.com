@@ -1,0 +1,321 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  permissions String   // JSON 문자열로 저장
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  members     Member[]
+
+  @@map("roles")
+}
+
+model Member {
+  id          String   @id @default(uuid())
+  gnuboardId  String?  @unique @map("gnuboard_id")
+  email       String   @unique
+  password    String?
+  name        String
+  avatarUrl   String?  @map("avatar_url")
+  roleId      String   @map("role_id")
+  department  String?
+  position    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  role              Role              @relation(fields: [roleId], references: [id])
+  ownedProjects     Project[]         @relation("ProjectOwner")
+  projectMemberships ProjectMember[]
+  assignedTasks     Task[]            @relation("TaskAssignee")
+  reportedTasks     Task[]            @relation("TaskReporter")
+  comments          Comment[]
+  activityLogs      ActivityLog[]
+
+  // Cell 관련 관계
+  ledCells           Cell[]       @relation("CellLeader")
+  cellMemberships    CellMember[]
+  attendances        Attendance[] @relation("AttendanceMember")
+  checkedAttendances Attendance[] @relation("AttendanceChecker")
+
+  @@map("members")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  status      String   @default("ACTIVE") // ACTIVE, COMPLETED, ARCHIVED
+  startDate   DateTime? @map("start_date")
+  endDate     DateTime? @map("end_date")
+  ownerId     String   @map("owner_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner    Member          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  members  ProjectMember[]
+  tasks    Task[]
+  labels   TaskLabel[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  memberId  String   @map("member_id")
+  role      String   @default("VIEWER") // OWNER, EDITOR, VIEWER
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, memberId])
+  @@map("project_members")
+}
+
+model Task {
+  id             String    @id @default(uuid())
+  projectId      String    @map("project_id")
+  title          String
+  description    String?
+  status         String    @default("TODO") // TODO, IN_PROGRESS, REVIEW, DONE
+  priority       String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  assigneeId     String?   @map("assignee_id")
+  reporterId     String?   @map("reporter_id")
+  startDate      DateTime? @map("start_date")
+  dueDate        DateTime? @map("due_date")
+  estimatedHours Float?    @map("estimated_hours")
+  actualHours    Float?    @map("actual_hours")
+  order          Int       @default(0)
+  parentId       String?   @map("parent_id")
+  folderUrl      String?   @map("folder_url")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee     Member?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  reporter     Member?       @relation("TaskReporter", fields: [reporterId], references: [id])
+  parent       Task?         @relation("TaskSubtasks", fields: [parentId], references: [id])
+  subtasks     Task[]        @relation("TaskSubtasks")
+  labels       TaskLabelRelation[]
+  comments     Comment[]
+  activityLogs ActivityLog[]
+
+  @@map("tasks")
+}
+
+model TaskLabel {
+  id        String @id @default(uuid())
+  name      String
+  color     String
+  projectId String @map("project_id")
+
+  project Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   TaskLabelRelation[]
+
+  @@map("task_labels")
+}
+
+model TaskLabelRelation {
+  taskId  String @map("task_id")
+  labelId String @map("label_id")
+
+  task  Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label TaskLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@map("task_label_relations")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  taskId    String   @map("task_id")
+  authorId  String   @map("author_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author Member @relation(fields: [authorId], references: [id])
+
+  @@map("comments")
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  taskId    String   @map("task_id")
+  memberId  String   @map("member_id")
+  action    String
+  details   String?  // JSON 문자열로 저장
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@map("activity_logs")
+}
+
+// ==================== 회의자료 게시판 모델 ====================
+
+model Meeting {
+  id          Int      @id @default(autoincrement())
+  title       String
+  meetingDate DateTime @map("meeting_date")
+  location    String?
+  projectId   Int?     @map("project_id")
+  content     String
+  contentType String   @default("text") @map("content_type") // text, json (TipTap)
+  summary     String?
+  authorId    Int      @map("author_id")
+  status      String   @default("DRAFT") // DRAFT, PUBLISHED
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  attendees   MeetingAttendee[]
+  attachments MeetingAttachment[]
+  comments    MeetingComment[]
+  agendas     MeetingAgenda[]
+  actionItems MeetingActionItem[]
+
+  @@map("wf_meetings")
+}
+
+model MeetingAttendee {
+  id        Int      @id @default(autoincrement())
+  meetingId Int      @map("meeting_id")
+  memberId  Int      @map("member_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, memberId])
+  @@map("wf_meeting_attendees")
+}
+
+model MeetingAttachment {
+  id          Int      @id @default(autoincrement())
+  meetingId   Int      @map("meeting_id")
+  fileName    String   @map("file_name")
+  storedName  String   @map("stored_name")
+  filePath    String   @map("file_path")
+  fileSize    Int      @map("file_size")
+  mimeType    String   @map("mime_type")
+  uploadedAt  DateTime @default(now()) @map("uploaded_at")
+  oneDriveId  String?  @map("onedrive_id")
+  storageType String   @default("local") @map("storage_type")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("wf_meeting_attachments")
+}
+
+model MeetingComment {
+  id        Int      @id @default(autoincrement())
+  meetingId Int      @map("meeting_id")
+  authorId  Int      @map("author_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("wf_meeting_comments")
+}
+
+model MeetingAgenda {
+  id          Int      @id @default(autoincrement())
+  meetingId   Int      @map("meeting_id")
+  order       Int      @default(0)
+  title       String
+  description String?
+  duration    Int?     // 예상 소요 시간 (분)
+  presenter   String?  // 발표자/담당자 이름
+  status      String   @default("PENDING") // PENDING, DISCUSSED, SKIPPED
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("wf_meeting_agendas")
+}
+
+model MeetingActionItem {
+  id          Int       @id @default(autoincrement())
+  meetingId   Int       @map("meeting_id")
+  title       String
+  description String?
+  assigneeId  Int?      @map("assignee_id")
+  dueDate     DateTime? @map("due_date")
+  priority    String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status      String    @default("TODO")   // TODO, IN_PROGRESS, DONE
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("wf_meeting_action_items")
+}
+
+// ==================== 셀 그룹 출석 관리 모델 ====================
+
+model Cell {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  color       String   @default("#00bcd4")
+  leaderId    String   @map("leader_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  leader      Member       @relation("CellLeader", fields: [leaderId], references: [id])
+  members     CellMember[]
+  attendances Attendance[]
+
+  @@map("cells")
+}
+
+model CellMember {
+  id        String    @id @default(uuid())
+  cellId    String    @map("cell_id")
+  memberId  String    @map("member_id")
+  role      String    @default("MEMBER") // LEADER, SUB_LEADER, MEMBER
+  joinedAt  DateTime  @default(now()) @map("joined_at")
+  leftAt    DateTime? @map("left_at")
+  isActive  Boolean   @default(true) @map("is_active")
+
+  cell   Cell   @relation(fields: [cellId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([cellId, memberId])
+  @@map("cell_members")
+}
+
+model Attendance {
+  id          String   @id @default(uuid())
+  cellId      String   @map("cell_id")
+  memberId    String   @map("member_id")
+  attendDate  DateTime @map("attend_date")
+  meetingType String   @map("meeting_type") // SUNDAY_SERVICE, CELL_MEETING
+  status      String   @default("PRESENT") // PRESENT, ABSENT, LATE, EXCUSED, ONLINE
+  note        String?
+  checkedById String   @map("checked_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  cell      Cell   @relation(fields: [cellId], references: [id], onDelete: Cascade)
+  member    Member @relation("AttendanceMember", fields: [memberId], references: [id])
+  checkedBy Member @relation("AttendanceChecker", fields: [checkedById], references: [id])
+
+  @@unique([cellId, memberId, attendDate, meetingType])
+  @@map("attendances")
+}

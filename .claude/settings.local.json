@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout:*)",
+      "Bash(curl:*)",
+      "Bash(ls \"c:\\\\Users\\\\USER\\\\Desktop\\\\Project\\\\work flow\\\\client\\\\src\\\\components\\\\modals\"\" 2>/dev/null || echo \"폴더 비어있음 또는 없음 \")",
+      "Bash(taskkill:*)",
+      "Bash(npm run dev:server:*)",
+      "Bash(npm search:*)",
+      "Bash(powershell -Command \"echo $env:APPDATA\")",
+      "Bash(powershell -Command \"[Environment]::GetFolderPath\\(''ApplicationData''\\)\")",
+      "Bash(powershell -Command \"mkdir -Force $env:USERPROFILE\\\\.ssh | Out-Null; Add-Content -Path $env:USERPROFILE\\\\.ssh\\\\known_hosts -Value ''balancelab.kr ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDTKw+k5HYoD8v741c+BFKIOKhl946QwSYFtGdRbTgnkngBagNLXedx54gx7TyMVZKQVlDdUAyuH88V99CI9NE7yr54Iq097elRD09gWAlfW1wwGHjfDQoCU6zc6g9ZMnVIEBPe5AF3jY6svYmj8uD+H139u7jCiez5/qjpi9MOmOZZniSJP7wYikBhMwyDpj+07XbPDjfczG6PZcvnk0fmvH2NfwHZ5kC082wbYoD5O5RdQ/RI6wNDPN3HsHm5P1yBpENQ7S01tLIRIqx8U9MU1WfaqlHfUnjZ/lltXaMN62CZ1J7ZIfa2YmM389ISCo6/OMZ0L9cKValq8AuJyyKf''\")",
+      "Bash(npx -y mysql2 -e \"SELECT 1\" --host=balancelab.kr --user=balancelab23 --password=erer0.0.)",
+      "Bash(node:*)",
+      "Bash(claude mcp list:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Workflow Management System 전체 업데이트\n\n- 칸반 보드, 간트 차트, 대시보드 구현\n- 팀 관리 및 멤버 기능 추가\n- 프로젝트/태스크 모달 시스템\n- 루틴 관리 기능\n- 전역 상태 관리 \\(Zustand\\)\n- Spatial UI 디자인 시스템\n- 서버 API 및 데이터베이스 설정\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: 회의 관리 기능 추가 및 코드 정리\n\n- 회의\\(Meetings\\) 페이지 및 관련 컴포넌트 추가\n  - MeetingsPage.tsx: 회의 목록 페이지\n  - MeetingFormModal.tsx: 회의 생성/수정 모달\n  - MeetingDetailModal.tsx: 회의 상세 보기 모달\n  - meetingStore.ts: 회의 상태 관리\n- 서버 회의 API 라우트 추가 \\(meetings.ts, meetings.php\\)\n- 모달 시스템 및 UI 개선\n- 사용하지 않는 situ-design 플러그인 아이콘 정리\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(cmd.exe /c \"rmdir /s /q C:\\\\Lacal_workspace\\\\project\\\\INTRUTH.COM\")",
+      "Bash(powershell -Command \"Remove-Item -Path ''C:\\\\Lacal_workspace\\\\project\\\\INTRUTH.COM'' -Recurse -Force\")",
+      "Bash(findstr:*)",
+      "Bash(wc:*)",
+      "Bash(npx madge:*)",
+      "Bash(git init:*)"
+    ]
+  }
+}

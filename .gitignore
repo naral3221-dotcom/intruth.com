@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Temp
+nul
+
+# Uploads
+uploads/
+
+# OneDrive token (보안 중요!)
+.onedrive-token.json
+
+# SQLite database
+*.db
+*.db-journal
