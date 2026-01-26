@@ -30,7 +30,10 @@
       "Bash(findstr:*)",
       "Bash(wc:*)",
       "Bash(npx madge:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)"
     ]
   }
 }
