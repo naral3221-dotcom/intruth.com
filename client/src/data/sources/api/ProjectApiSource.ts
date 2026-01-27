@@ -43,32 +43,32 @@ export class ProjectApiSource {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.teamId) searchParams.set('teamId', params.teamId);
     const query = searchParams.toString();
-    return this.httpClient.get<Project[]>(`/projects.php${query ? `?${query}` : ''}`);
+    return this.httpClient.get<Project[]>(`/projects${query ? `?${query}` : ''}`);
   }
 
   async get(id: string): Promise<Project> {
-    return this.httpClient.get<Project>(`/projects.php?id=${id}`);
+    return this.httpClient.get<Project>(`/projects?id=${id}`);
   }
 
   async create(data: ProjectApiCreateInput): Promise<Project> {
-    return this.httpClient.post<Project>('/projects.php', data);
+    return this.httpClient.post<Project>('/projects', data);
   }
 
   async update(id: string, data: ProjectApiUpdateInput): Promise<Project> {
-    return this.httpClient.put<Project>(`/projects.php?id=${id}`, data);
+    return this.httpClient.put<Project>(`/projects?id=${id}`, data);
   }
 
   async delete(id: string): Promise<void> {
-    await this.httpClient.delete<void>(`/projects.php?id=${id}`);
+    await this.httpClient.delete<void>(`/projects?id=${id}`);
   }
 
   // Members
   async getMembers(projectId: string): Promise<ProjectMember[]> {
-    return this.httpClient.get<ProjectMember[]>(`/projects.php?id=${projectId}&action=members`);
+    return this.httpClient.get<ProjectMember[]>(`/projects?id=${projectId}&action=members`);
   }
 
   async addMember(projectId: string, memberId: string, role?: string): Promise<ProjectMember> {
-    return this.httpClient.post<ProjectMember>(`/projects.php?id=${projectId}&action=member`, {
+    return this.httpClient.post<ProjectMember>(`/projects?id=${projectId}&action=member`, {
       memberId,
       role
     });
@@ -76,46 +76,46 @@ export class ProjectApiSource {
 
   async updateMemberRole(projectId: string, memberId: string, role: string): Promise<ProjectMember> {
     return this.httpClient.patch<ProjectMember>(
-      `/projects.php?id=${projectId}&action=member&memberId=${memberId}`,
+      `/projects?id=${projectId}&action=member&memberId=${memberId}`,
       { role }
     );
   }
 
   async removeMember(projectId: string, memberId: string): Promise<void> {
     await this.httpClient.delete<void>(
-      `/projects.php?id=${projectId}&action=member&memberId=${memberId}`
+      `/projects?id=${projectId}&action=member&memberId=${memberId}`
     );
   }
 
   // Labels
   async getLabels(projectId: string): Promise<TaskLabel[]> {
-    return this.httpClient.get<TaskLabel[]>(`/projects.php?id=${projectId}&action=labels`);
+    return this.httpClient.get<TaskLabel[]>(`/projects?id=${projectId}&action=labels`);
   }
 
   async addLabel(projectId: string, data: { name: string; color: string }): Promise<TaskLabel> {
-    return this.httpClient.post<TaskLabel>(`/projects.php?id=${projectId}&action=label`, data);
+    return this.httpClient.post<TaskLabel>(`/projects?id=${projectId}&action=label`, data);
   }
 
   async updateLabel(projectId: string, labelId: string, data: Partial<TaskLabel>): Promise<TaskLabel> {
     return this.httpClient.patch<TaskLabel>(
-      `/projects.php?id=${projectId}&action=label&labelId=${labelId}`,
+      `/projects?id=${projectId}&action=label&labelId=${labelId}`,
       data
     );
   }
 
   async removeLabel(projectId: string, labelId: string): Promise<void> {
     await this.httpClient.delete<void>(
-      `/projects.php?id=${projectId}&action=label&labelId=${labelId}`
+      `/projects?id=${projectId}&action=label&labelId=${labelId}`
     );
   }
 
   // Teams
   async getTeams(projectId: string): Promise<Team[]> {
-    return this.httpClient.get<Team[]>(`/projects.php?id=${projectId}&action=teams`);
+    return this.httpClient.get<Team[]>(`/projects?id=${projectId}&action=teams`);
   }
 
   async addTeam(projectId: string, teamId: string, assigneeIds?: string[]): Promise<void> {
-    await this.httpClient.post<void>(`/projects.php?id=${projectId}&action=team`, {
+    await this.httpClient.post<void>(`/projects?id=${projectId}&action=team`, {
       teamId,
       assigneeIds
     });
@@ -123,13 +123,13 @@ export class ProjectApiSource {
 
   async removeTeam(projectId: string, teamId: string): Promise<void> {
     await this.httpClient.delete<void>(
-      `/projects.php?id=${projectId}&action=team&teamId=${teamId}`
+      `/projects?id=${projectId}&action=team&teamId=${teamId}`
     );
   }
 
   async updateTeamAssignees(projectId: string, teamId: string, assigneeIds: string[]): Promise<void> {
     await this.httpClient.patch<void>(
-      `/projects.php?id=${projectId}&action=team&teamId=${teamId}`,
+      `/projects?id=${projectId}&action=team&teamId=${teamId}`,
       { assigneeIds }
     );
   }

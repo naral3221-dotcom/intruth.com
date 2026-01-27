@@ -33,32 +33,32 @@ export class TeamApiSource {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.leaderId) searchParams.set('leaderId', params.leaderId);
     const query = searchParams.toString();
-    return this.httpClient.get<Team[]>(`/teams.php${query ? `?${query}` : ''}`);
+    return this.httpClient.get<Team[]>(`/teams${query ? `?${query}` : ''}`);
   }
 
   async get(id: string): Promise<Team> {
-    return this.httpClient.get<Team>(`/teams.php?id=${id}`);
+    return this.httpClient.get<Team>(`/teams?id=${id}`);
   }
 
   async create(data: TeamApiCreateInput): Promise<Team> {
-    return this.httpClient.post<Team>('/teams.php', data);
+    return this.httpClient.post<Team>('/teams', data);
   }
 
   async update(id: string, data: TeamApiUpdateInput): Promise<Team> {
-    return this.httpClient.put<Team>(`/teams.php?id=${id}`, data);
+    return this.httpClient.put<Team>(`/teams?id=${id}`, data);
   }
 
   async delete(id: string): Promise<void> {
-    await this.httpClient.delete<void>(`/teams.php?id=${id}`);
+    await this.httpClient.delete<void>(`/teams?id=${id}`);
   }
 
   // Members
   async getMembers(teamId: string): Promise<TeamMember[]> {
-    return this.httpClient.get<TeamMember[]>(`/teams.php?id=${teamId}&action=members`);
+    return this.httpClient.get<TeamMember[]>(`/teams?id=${teamId}&action=members`);
   }
 
   async addMember(teamId: string, memberId: string, role?: TeamMemberRole): Promise<TeamMember> {
-    return this.httpClient.post<TeamMember>(`/teams.php?id=${teamId}&action=member`, {
+    return this.httpClient.post<TeamMember>(`/teams?id=${teamId}&action=member`, {
       memberId,
       role
     });
@@ -66,28 +66,28 @@ export class TeamApiSource {
 
   async updateMemberRole(teamId: string, memberId: string, role: TeamMemberRole): Promise<TeamMember> {
     return this.httpClient.patch<TeamMember>(
-      `/teams.php?id=${teamId}&action=member&memberId=${memberId}`,
+      `/teams?id=${teamId}&action=member&memberId=${memberId}`,
       { role }
     );
   }
 
   async removeMember(teamId: string, memberId: string): Promise<void> {
     await this.httpClient.delete<void>(
-      `/teams.php?id=${teamId}&action=member&memberId=${memberId}`
+      `/teams?id=${teamId}&action=member&memberId=${memberId}`
     );
   }
 
   // Stats
   async getStats(teamId: string): Promise<TeamStats> {
-    return this.httpClient.get<TeamStats>(`/teams.php?id=${teamId}&action=stats`);
+    return this.httpClient.get<TeamStats>(`/teams?id=${teamId}&action=stats`);
   }
 
   async getAllStats(): Promise<TeamStats[]> {
-    return this.httpClient.get<TeamStats[]>('/teams.php?action=stats');
+    return this.httpClient.get<TeamStats[]>('/teams?action=stats');
   }
 
   // Leader
   async setLeader(teamId: string, memberId: string): Promise<Team> {
-    return this.httpClient.patch<Team>(`/teams.php?id=${teamId}`, { leaderId: memberId });
+    return this.httpClient.patch<Team>(`/teams?id=${teamId}`, { leaderId: memberId });
   }
 }

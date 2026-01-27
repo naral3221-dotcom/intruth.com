@@ -32,7 +32,7 @@ export class DashboardApiSource {
     if (filters?.teamId) searchParams.set('teamId', filters.teamId);
     if (filters?.projectId) searchParams.set('projectId', filters.projectId);
     const query = searchParams.toString();
-    return this.httpClient.get<DashboardData>(`/dashboard.php${query ? `?${query}` : ''}`);
+    return this.httpClient.get<DashboardData>(`/dashboard${query ? `?${query}` : ''}`);
   }
 
   async getStats(filters?: DashboardApiFilters): Promise<DashboardStats> {
@@ -42,27 +42,27 @@ export class DashboardApiSource {
     if (filters?.endDate) searchParams.set('endDate', filters.endDate);
     if (filters?.teamId) searchParams.set('teamId', filters.teamId);
     if (filters?.projectId) searchParams.set('projectId', filters.projectId);
-    return this.httpClient.get<DashboardStats>(`/dashboard.php?${searchParams.toString()}`);
+    return this.httpClient.get<DashboardStats>(`/dashboard?${searchParams.toString()}`);
   }
 
   async getMyTasks(): Promise<Task[]> {
-    return this.httpClient.get<Task[]>('/dashboard.php?action=my-tasks');
+    return this.httpClient.get<Task[]>('/dashboard?action=my-tasks');
   }
 
   async getMyOverdueTasks(): Promise<Task[]> {
-    return this.httpClient.get<Task[]>('/dashboard.php?action=my-overdue');
+    return this.httpClient.get<Task[]>('/dashboard?action=my-overdue');
   }
 
   async getMyUpcomingTasks(days: number = 7): Promise<Task[]> {
-    return this.httpClient.get<Task[]>(`/dashboard.php?action=my-upcoming&days=${days}`);
+    return this.httpClient.get<Task[]>(`/dashboard?action=my-upcoming&days=${days}`);
   }
 
   async getTeamProgress(): Promise<TeamProgress[]> {
-    return this.httpClient.get<TeamProgress[]>('/dashboard.php?action=team-progress');
+    return this.httpClient.get<TeamProgress[]>('/dashboard?action=team-progress');
   }
 
   async getMemberProgress(memberId: string): Promise<TeamProgress> {
-    return this.httpClient.get<TeamProgress>(`/dashboard.php?action=member-progress&memberId=${memberId}`);
+    return this.httpClient.get<TeamProgress>(`/dashboard?action=member-progress&memberId=${memberId}`);
   }
 
   async getRecentActivities(params?: ActivityApiListParams): Promise<ActivityLog[]> {
@@ -74,14 +74,14 @@ export class DashboardApiSource {
     if (params?.memberId) searchParams.set('memberId', params.memberId);
     if (params?.projectId) searchParams.set('projectId', params.projectId);
     if (params?.action) searchParams.set('actionType', params.action);
-    return this.httpClient.get<ActivityLog[]>(`/dashboard.php?${searchParams.toString()}`);
+    return this.httpClient.get<ActivityLog[]>(`/dashboard?${searchParams.toString()}`);
   }
 
   async getProjectsProgress(): Promise<ProjectProgress[]> {
-    return this.httpClient.get<ProjectProgress[]>('/dashboard.php?action=projects-progress');
+    return this.httpClient.get<ProjectProgress[]>('/dashboard?action=projects-progress');
   }
 
   async getProjectProgress(projectId: string): Promise<ProjectProgress> {
-    return this.httpClient.get<ProjectProgress>(`/dashboard.php?action=project-progress&projectId=${projectId}`);
+    return this.httpClient.get<ProjectProgress>(`/dashboard?action=project-progress&projectId=${projectId}`);
   }
 }

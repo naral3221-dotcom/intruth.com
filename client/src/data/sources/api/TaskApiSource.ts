@@ -47,62 +47,62 @@ export class TaskApiSource {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.assigneeId) searchParams.set('assigneeId', params.assigneeId);
     const query = searchParams.toString();
-    return this.httpClient.get<Task[]>(`/tasks.php${query ? `?${query}` : ''}`);
+    return this.httpClient.get<Task[]>(`/tasks${query ? `?${query}` : ''}`);
   }
 
   async get(id: string): Promise<Task> {
-    return this.httpClient.get<Task>(`/tasks.php?id=${id}`);
+    return this.httpClient.get<Task>(`/tasks/${id}`);
   }
 
   async create(data: TaskApiCreateInput): Promise<Task> {
-    return this.httpClient.post<Task>('/tasks.php', data);
+    return this.httpClient.post<Task>('/tasks', data);
   }
 
   async update(id: string, data: TaskApiUpdateInput): Promise<Task> {
-    return this.httpClient.put<Task>(`/tasks.php?id=${id}`, data);
+    return this.httpClient.put<Task>(`/tasks/${id}`, data);
   }
 
   async updateStatus(id: string, status: TaskStatus, order?: number): Promise<Task> {
-    return this.httpClient.patch<Task>(`/tasks.php?id=${id}`, { status, order });
+    return this.httpClient.patch<Task>(`/tasks/${id}/status`, { status, order });
   }
 
   async updateOrder(id: string, order: number): Promise<Task> {
-    return this.httpClient.patch<Task>(`/tasks.php?id=${id}`, { order });
+    return this.httpClient.patch<Task>(`/tasks/${id}/order`, { order });
   }
 
   async delete(id: string): Promise<void> {
-    await this.httpClient.delete<void>(`/tasks.php?id=${id}`);
+    await this.httpClient.delete<void>(`/tasks/${id}`);
   }
 
   // Batch operations
   async deleteMany(ids: string[]): Promise<{ deletedCount: number }> {
-    return this.httpClient.post<{ deletedCount: number }>('/tasks.php?action=deleteMany', { ids });
+    return this.httpClient.post<{ deletedCount: number }>('/tasks/batch/delete', { ids });
   }
 
   async updateMany(ids: string[], data: TaskApiUpdateInput): Promise<Task[]> {
-    return this.httpClient.post<Task[]>('/tasks.php?action=updateMany', { ids, data });
+    return this.httpClient.post<Task[]>('/tasks/batch/update', { ids, data });
   }
 
   // Comments
   async getComments(taskId: string): Promise<Comment[]> {
-    return this.httpClient.get<Comment[]>(`/tasks.php?id=${taskId}&action=comments`);
+    return this.httpClient.get<Comment[]>(`/tasks/${taskId}/comments`);
   }
 
   async addComment(taskId: string, content: string): Promise<Comment> {
-    return this.httpClient.post<Comment>(`/tasks.php?id=${taskId}&action=comment`, { content });
+    return this.httpClient.post<Comment>(`/tasks/${taskId}/comments`, { content });
   }
 
   async deleteComment(taskId: string, commentId: string): Promise<void> {
-    await this.httpClient.delete<void>(`/tasks.php?id=${taskId}&action=comment&commentId=${commentId}`);
+    await this.httpClient.delete<void>(`/tasks/${taskId}/comments/${commentId}`);
   }
 
   // Subtasks
   async getSubtasks(taskId: string): Promise<Task[]> {
-    return this.httpClient.get<Task[]>(`/tasks.php?parentId=${taskId}`);
+    return this.httpClient.get<Task[]>(`/tasks?parentId=${taskId}`);
   }
 
   // Activities
   async getActivities(taskId: string): Promise<ActivityLog[]> {
-    return this.httpClient.get<ActivityLog[]>(`/tasks.php?id=${taskId}&action=activities`);
+    return this.httpClient.get<ActivityLog[]>(`/tasks/${taskId}/activities`);
   }
 }

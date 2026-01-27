@@ -10,18 +10,18 @@ export class AdminApiSource {
   constructor(private httpClient: HttpClient) {}
 
   async getUsers(): Promise<AuthUser[]> {
-    const users = await this.httpClient.get<Record<string, unknown>[]>('/admin/users.php');
+    const users = await this.httpClient.get<Record<string, unknown>[]>('/admin/users');
     return users.map(this.mapToAuthUser);
   }
 
   async getUserById(id: string): Promise<AuthUser> {
-    const user = await this.httpClient.get<Record<string, unknown>>(`/admin/users.php?id=${id}`);
+    const user = await this.httpClient.get<Record<string, unknown>>(`/admin/users?id=${id}`);
     return this.mapToAuthUser(user);
   }
 
   async createUser(data: CreateUserDTO): Promise<CreateUserResult> {
     const result = await this.httpClient.post<{ user: Record<string, unknown>; tempPassword: string }>(
-      '/admin/users.php',
+      '/admin/users',
       data
     );
     return {
@@ -32,19 +32,19 @@ export class AdminApiSource {
 
   async updateUser(id: string, data: UpdateUserDTO): Promise<AuthUser> {
     const result = await this.httpClient.put<{ user: Record<string, unknown> }>(
-      `/admin/users.php?id=${id}`,
+      `/admin/users?id=${id}`,
       data
     );
     return this.mapToAuthUser(result.user);
   }
 
   async deleteUser(id: string): Promise<void> {
-    await this.httpClient.delete(`/admin/users.php?id=${id}`);
+    await this.httpClient.delete(`/admin/users?id=${id}`);
   }
 
   async resetPassword(userId: string, newPassword?: string): Promise<string> {
     const result = await this.httpClient.post<{ tempPassword: string }>(
-      '/admin/reset-password.php',
+      '/admin/reset-password',
       { userId, newPassword }
     );
     return result.tempPassword;

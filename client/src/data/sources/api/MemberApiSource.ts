@@ -41,64 +41,64 @@ export class MemberApiSource {
     if (params?.roleId) searchParams.set('roleId', params.roleId);
     if (params?.isActive !== undefined) searchParams.set('isActive', String(params.isActive));
     const query = searchParams.toString();
-    return this.httpClient.get<Member[]>(`/members.php${query ? `?${query}` : ''}`);
+    return this.httpClient.get<Member[]>(`/members${query ? `?${query}` : ''}`);
   }
 
   async get(id: string): Promise<Member> {
-    return this.httpClient.get<Member>(`/members.php?id=${id}`);
+    return this.httpClient.get<Member>(`/members?id=${id}`);
   }
 
   async getByEmail(email: string): Promise<Member | null> {
     try {
-      return await this.httpClient.get<Member>(`/members.php?email=${encodeURIComponent(email)}`);
+      return await this.httpClient.get<Member>(`/members?email=${encodeURIComponent(email)}`);
     } catch {
       return null;
     }
   }
 
   async getCurrentMember(): Promise<Member> {
-    return this.httpClient.get<Member>('/members.php?action=me');
+    return this.httpClient.get<Member>('/members?action=me');
   }
 
   async invite(data: MemberApiInviteInput): Promise<Member> {
-    return this.httpClient.post<Member>('/members.php', data);
+    return this.httpClient.post<Member>('/members', data);
   }
 
   async update(id: string, data: MemberApiUpdateInput): Promise<Member> {
-    return this.httpClient.put<Member>(`/members.php?id=${id}`, data);
+    return this.httpClient.put<Member>(`/members?id=${id}`, data);
   }
 
   async remove(id: string): Promise<void> {
-    await this.httpClient.delete<void>(`/members.php?id=${id}`);
+    await this.httpClient.delete<void>(`/members?id=${id}`);
   }
 
   async activate(id: string): Promise<Member> {
-    return this.httpClient.patch<Member>(`/members.php?id=${id}`, { isActive: true });
+    return this.httpClient.patch<Member>(`/members?id=${id}`, { isActive: true });
   }
 
   async deactivate(id: string): Promise<Member> {
-    return this.httpClient.patch<Member>(`/members.php?id=${id}`, { isActive: false });
+    return this.httpClient.patch<Member>(`/members?id=${id}`, { isActive: false });
   }
 
   // Tasks
   async getTasks(memberId: string): Promise<Task[]> {
-    return this.httpClient.get<Task[]>(`/members.php?id=${memberId}&action=tasks`);
+    return this.httpClient.get<Task[]>(`/members?id=${memberId}&action=tasks`);
   }
 
   async getWorkload(memberId: string): Promise<MemberWorkload> {
-    return this.httpClient.get<MemberWorkload>(`/members.php?id=${memberId}&action=workload`);
+    return this.httpClient.get<MemberWorkload>(`/members?id=${memberId}&action=workload`);
   }
 
   async getWorkloads(): Promise<MemberWorkload[]> {
-    return this.httpClient.get<MemberWorkload[]>('/members.php?action=workloads');
+    return this.httpClient.get<MemberWorkload[]>('/members?action=workloads');
   }
 
   // Roles
   async getRoles(): Promise<Role[]> {
-    return this.httpClient.get<Role[]>('/members.php?action=roles');
+    return this.httpClient.get<Role[]>('/members?action=roles');
   }
 
   async assignRole(memberId: string, roleId: string): Promise<Member> {
-    return this.httpClient.patch<Member>(`/members.php?id=${memberId}`, { roleId });
+    return this.httpClient.patch<Member>(`/members?id=${memberId}`, { roleId });
   }
 }
