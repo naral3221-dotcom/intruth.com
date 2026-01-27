@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Workflow Management System Backend",
   "main": "dist/server.js",
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate && tsc",

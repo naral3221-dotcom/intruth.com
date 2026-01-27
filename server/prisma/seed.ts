@@ -12,12 +12,12 @@ async function main() {
       name: 'Admin',
       description: '시스템 관리자',
       isSystem: true,
-      permissions: {
+      permissions: JSON.stringify({
         project: { create: true, edit: true, delete: true, manage_members: true },
         task: { create: true, edit: true, delete: true, assign: true },
         member: { view_all: true, view_workload: true, manage: true },
         system: { manage_roles: true, view_all_stats: true, manage_settings: true }
-      }
+      })
     }
   });
 
@@ -28,12 +28,12 @@ async function main() {
       name: 'Manager',
       description: '팀 관리자',
       isSystem: true,
-      permissions: {
+      permissions: JSON.stringify({
         project: { create: true, edit: true, delete: false, manage_members: true },
         task: { create: true, edit: true, delete: true, assign: true },
         member: { view_all: true, view_workload: true, manage: false },
         system: { manage_roles: false, view_all_stats: true, manage_settings: false }
-      }
+      })
     }
   });
 
@@ -44,12 +44,12 @@ async function main() {
       name: 'Member',
       description: '일반 팀원',
       isSystem: true,
-      permissions: {
+      permissions: JSON.stringify({
         project: { create: false, edit: false, delete: false, manage_members: false },
         task: { create: true, edit: true, delete: false, assign: false },
         member: { view_all: true, view_workload: false, manage: false },
         system: { manage_roles: false, view_all_stats: false, manage_settings: false }
-      }
+      })
     }
   });
 

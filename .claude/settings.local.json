@@ -38,7 +38,11 @@
       "Bash(set VITE_BASE_PATH=/)",
       "Bash(set \"DATABASE_URL=postgresql://postgres:OFvxsIeduepincZbHicGfvZUlfsGGFzI@turntable.proxy.rlwy.net:57132/railway\")",
       "Bash(npx prisma migrate dev:*)",
-      "Bash(npx prisma migrate diff:*)"
+      "Bash(npx prisma migrate diff:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:OFvxsIeduepincZbHicGfvZUlfsGGFzI@turntable.proxy.rlwy.net:57132/railway\" npx prisma migrate resolve:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:OFvxsIeduepincZbHicGfvZUlfsGGFzI@turntable.proxy.rlwy.net:57132/railway\" npx prisma migrate deploy:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:OFvxsIeduepincZbHicGfvZUlfsGGFzI@turntable.proxy.rlwy.net:57132/railway\" npx prisma db execute:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:OFvxsIeduepincZbHicGfvZUlfsGGFzI@turntable.proxy.rlwy.net:57132/railway\" npx prisma db seed:*)"
     ]
   }
 }
