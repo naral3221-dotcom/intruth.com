@@ -15,33 +15,29 @@ export interface LoginInput {
 
 export interface LoginResult {
   token: string;
-  member: {
+  user: {
     id: string;
+    username: string;
     email: string;
     name: string;
     avatarUrl: string | null;
     department: string | null;
     position: string | null;
-    role: {
-      id: string;
-      name: string;
-      permissions: string; // JSON string stored in DB
-    } | null;
+    role: string;
   };
+  mustChangePassword: boolean;
 }
 
 export interface MemberProfile {
   id: string;
+  username: string;
   email: string;
   name: string;
   avatarUrl: string | null;
   department: string | null;
   position: string | null;
-  role: {
-    id: string;
-    name: string;
-    permissions: string; // JSON string stored in DB
-  } | null;
+  role: string;
+  mustChangePassword: boolean;
 }
 
 export interface ChangePasswordInput {
@@ -100,21 +96,17 @@ export class AuthService {
 
     return {
       token,
-      member: {
+      user: {
         id: member.id,
+        username: member.email.split('@')[0],
         email: member.email,
         name: member.name,
         avatarUrl: member.avatarUrl,
         department: member.department,
         position: member.position,
-        role: member.role
-          ? {
-              id: member.role.id,
-              name: member.role.name,
-              permissions: member.role.permissions,
-            }
-          : null,
+        role: member.role?.name || 'Member',
       },
+      mustChangePassword: member.mustChangePassword,
     };
   }
 
@@ -133,18 +125,14 @@ export class AuthService {
 
     return {
       id: member.id,
+      username: member.email.split('@')[0],
       email: member.email,
       name: member.name,
       avatarUrl: member.avatarUrl,
       department: member.department,
       position: member.position,
-      role: member.role
-        ? {
-            id: member.role.id,
-            name: member.role.name,
-            permissions: member.role.permissions,
-          }
-        : null,
+      role: member.role?.name || 'Member',
+      mustChangePassword: member.mustChangePassword,
     };
   }
 
