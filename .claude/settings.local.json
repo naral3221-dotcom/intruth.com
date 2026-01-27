@@ -33,7 +33,12 @@
       "Bash(git init:*)",
       "Bash(git commit:*)",
       "Bash(git remote add:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "WebFetch(domain:intruthcom-production.up.railway.app)",
+      "Bash(set VITE_BASE_PATH=/)",
+      "Bash(set \"DATABASE_URL=postgresql://postgres:OFvxsIeduepincZbHicGfvZUlfsGGFzI@turntable.proxy.rlwy.net:57132/railway\")",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma migrate diff:*)"
     ]
   }
 }
