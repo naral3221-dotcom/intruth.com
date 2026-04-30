@@ -128,7 +128,7 @@
 │
 ├── shared/                        # 클라이언트 공통 유틸리티
 │   ├── ai/                        # AI 기능 API 유틸리티
-│   │   └── meetingRecordingApi.ts # 회의 녹음 업로드/전사 API
+│   │   └── meetingRecordingApi.ts # 회의 녹음 업로드/전사/자료 생성 API
 │   ├── pwa/                       # PWA 등록/설치 프롬프트
 │   │   ├── registerServiceWorker.ts
 │   │   └── useInstallPrompt.ts
@@ -177,7 +177,7 @@
 │   ├── ProjectService.ts
 │   ├── MemberService.ts
 │   └── ai/
-│       └── AiTranscriptionService.ts  # 회의 녹음 업로드/전사
+│       └── AiTranscriptionService.ts  # 회의 녹음 업로드/전사/회의자료 생성
 │
 ├── di/                            # 의존성 주입
 │   └── container.ts               # DI Container
@@ -186,7 +186,7 @@
 │   ├── tasks.ts                   # Service 사용
 │   ├── projects.ts
 │   ├── members.ts
-│   ├── ai.ts                      # AI 회의 녹음/전사
+│   ├── ai.ts                      # AI 회의 녹음/전사/회의자료 생성
 │   ├── teams.ts                   # 팀 API 조회 호환 라우트
 │   ├── routineTasks.ts            # 루틴 업무 API 조회 호환 라우트
 │   └── ...
@@ -310,6 +310,7 @@ NODE_ENV=development|production
 OPENAI_API_KEY=                # OpenAI API 키 (AI 전사/에이전트 기능)
 OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe  # 전사 모델
 OPENAI_TRANSCRIBE_PROMPT=      # 한국어/교회 용어 전사용 추가 문맥
+OPENAI_MEETING_MODEL=gpt-4o-mini  # 회의자료 구조화 생성 모델
 ```
 
 ---
@@ -358,12 +359,13 @@ OPENAI_TRANSCRIBE_PROMPT=      # 한국어/교회 용어 전사용 추가 문맥
 - [x] 카카오 링크 공유 및 회의자료 PDF 파일 공유 1차 구현
 - [x] 모바일 홈 대시보드 및 업무/회의 딥링크 처리
 - [x] AI 회의 녹음 업로드/전사 기반 1차 구현
+- [x] AI 회의자료 초안 생성 및 회의 요약/액션아이템 반영
 
 **향후 작업:**
 - [ ] OneDriveStorageService 구현 (서버 배포 시)
 - [ ] Kakao Developers 앱 JavaScript 키/도메인/공유 설정
 - [ ] 서버 기반 자료 공유 링크 및 장기 저장 설계
-- [ ] AI 회의자료 초안 생성 및 승인 기반 업무 생성
+- [ ] AI 회의자료 승인 워크플로우 및 일반 업무 자동 생성
 
 ---
 

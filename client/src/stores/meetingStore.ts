@@ -28,8 +28,8 @@ interface MeetingState {
   deleteComment: (meetingId: number, commentId: number) => Promise<void>;
 
   // Selectors
-  getMeetingsByProject: (projectId: number) => Meeting[];
-  getMeetingsByAuthor: (authorId: number) => Meeting[];
+  getMeetingsByProject: (projectId: string) => Meeting[];
+  getMeetingsByAuthor: (authorId: string) => Meeting[];
   getMeetingsByStatus: (status: MeetingStatus) => Meeting[];
   getRecentMeetings: (count?: number) => Meeting[];
   getThisWeekMeetings: () => Meeting[];
@@ -302,11 +302,11 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
   },
 
   // Selectors
-  getMeetingsByProject: (projectId: number) => {
+  getMeetingsByProject: (projectId: string) => {
     return get().meetings.filter((m) => m.projectId === projectId);
   },
 
-  getMeetingsByAuthor: (authorId: number) => {
+  getMeetingsByAuthor: (authorId: string) => {
     return get().meetings.filter((m) => m.authorId === authorId);
   },
 

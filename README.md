@@ -54,6 +54,9 @@ npm run dev:db
 ```env
 DATABASE_URL="postgresql://postgres:password@127.0.0.1:5433/intruth_dev?schema=public"
 PORT=3002
+OPENAI_API_KEY="your-openai-api-key"
+OPENAI_TRANSCRIBE_MODEL="gpt-4o-transcribe"
+OPENAI_MEETING_MODEL="gpt-4o-mini"
 ```
 
 DB가 켜진 상태에서 스키마와 샘플 데이터를 적용합니다.

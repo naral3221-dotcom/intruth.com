@@ -175,11 +175,11 @@ model Meeting {
   title       String
   meetingDate DateTime @map("meeting_date")
   location    String?
-  projectId   Int?     @map("project_id")
+  projectId   String?  @map("project_id")
   content     String
   contentType String   @default("text") @map("content_type") // text, json (TipTap)
   summary     String?
-  authorId    Int      @map("author_id")
+  authorId    String   @map("author_id")
   status      String   @default("DRAFT") // DRAFT, PUBLISHED
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -197,7 +197,7 @@ model Meeting {
 model MeetingAttendee {
   id        Int      @id @default(autoincrement())
   meetingId Int      @map("meeting_id")
-  memberId  Int      @map("member_id")
+  memberId  String   @map("member_id")
   createdAt DateTime @default(now()) @map("created_at")
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
@@ -226,7 +226,7 @@ model MeetingAttachment {
 model MeetingComment {
   id        Int      @id @default(autoincrement())
   meetingId Int      @map("meeting_id")
-  authorId  Int      @map("author_id")
+  authorId  String   @map("author_id")
   content   String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -257,7 +257,7 @@ model MeetingActionItem {
   meetingId   Int       @map("meeting_id")
   title       String
   description String?
-  assigneeId  Int?      @map("assignee_id")
+  assigneeId  String?   @map("assignee_id")
   dueDate     DateTime? @map("due_date")
   priority    String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
   status      String    @default("TODO")   // TODO, IN_PROGRESS, DONE
@@ -283,7 +283,7 @@ model MeetingRecording {
   errorMessage    String?  @map("error_message")
   oneDriveId      String?  @map("onedrive_id")
   storageType     String   @default("local") @map("storage_type")
-  createdById     Int      @map("created_by_id")
+  createdById     String   @map("created_by_id")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

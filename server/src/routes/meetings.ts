@@ -22,9 +22,9 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<v
     const meetingService = getMeetingService();
 
     const meetings = await meetingService.findAll({
-      projectId: projectId ? Number(projectId) : undefined,
-      authorId: authorId ? Number(authorId) : undefined,
-      attendeeId: attendeeId ? Number(attendeeId) : undefined,
+      projectId: projectId ? String(projectId) : undefined,
+      authorId: authorId ? String(authorId) : undefined,
+      attendeeId: attendeeId ? String(attendeeId) : undefined,
       status: status as 'DRAFT' | 'PUBLISHED' | undefined,
       startDate: startDate ? new Date(startDate as string) : undefined,
       endDate: endDate ? new Date(endDate as string) : undefined,
@@ -61,20 +61,20 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
         title,
         meetingDate: new Date(meetingDate),
         location,
-        projectId: projectId ? Number(projectId) : null,
+        projectId: projectId ? String(projectId) : null,
         content,
         contentType,
         summary,
-        attendeeIds: attendeeIds?.map(Number),
+        attendeeIds: attendeeIds?.map(String),
         status,
         agendas,
         actionItems: actionItems?.map((item: any) => ({
           ...item,
-          assigneeId: item.assigneeId ? Number(item.assigneeId) : undefined,
+          assigneeId: item.assigneeId ? String(item.assigneeId) : undefined,
           dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
         })),
       },
-      Number(req.member!.id)
+      req.member!.id
     );
 
     res.status(201).json(meeting);
@@ -96,11 +96,11 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promis
         title,
         meetingDate: meetingDate ? new Date(meetingDate) : undefined,
         location,
-        projectId: projectId !== undefined ? (projectId ? Number(projectId) : null) : undefined,
+        projectId: projectId !== undefined ? (projectId ? String(projectId) : null) : undefined,
         content,
         contentType,
         summary,
-        attendeeIds: attendeeIds?.map(Number),
+        attendeeIds: attendeeIds?.map(String),
         status,
       },
       {
@@ -203,7 +203,7 @@ router.post('/:id/comments', authenticate, async (req: AuthRequest, res: Respons
     const comment = await meetingService.createComment(
       Number(req.params.id),
       content,
-      Number(req.member!.id)
+      req.member!.id
     );
 
     res.status(201).json(comment);
@@ -352,7 +352,7 @@ router.post('/:id/action-items', authenticate, async (req: AuthRequest, res: Res
       {
         title,
         description,
-        assigneeId: assigneeId ? Number(assigneeId) : undefined,
+        assigneeId: assigneeId ? String(assigneeId) : undefined,
         dueDate: dueDate ? new Date(dueDate) : undefined,
         priority,
       },
@@ -380,7 +380,7 @@ router.put('/:id/action-items/:actionItemId', authenticate, async (req: AuthRequ
       {
         title,
         description,
-        assigneeId: assigneeId !== undefined ? (assigneeId ? Number(assigneeId) : undefined) : undefined,
+        assigneeId: assigneeId !== undefined ? (assigneeId ? String(assigneeId) : undefined) : undefined,
         dueDate: dueDate ? new Date(dueDate) : undefined,
         priority,
         status,

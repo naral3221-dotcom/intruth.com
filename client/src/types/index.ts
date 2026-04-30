@@ -283,12 +283,12 @@ export interface Meeting {
   title: string;
   meetingDate: string;
   location?: string;
-  projectId?: number;
-  project?: { id: number; name: string };
+  projectId?: string;
+  project?: { id: string; name: string };
   content: string;
   contentType?: MeetingContentType;
   summary?: string;
-  authorId: number;
+  authorId: string;
   author: Member;
   attendees: MeetingAttendee[];
   attachments?: MeetingAttachment[];
@@ -320,7 +320,7 @@ export interface MeetingActionItem {
   meetingId: number;
   title: string;
   description?: string;
-  assigneeId?: number;
+  assigneeId?: string;
   assignee?: Member;
   dueDate?: string;
   priority: ActionItemPriority;
@@ -332,7 +332,7 @@ export interface MeetingActionItem {
 export interface MeetingAttendee {
   id: number;
   meetingId: number;
-  memberId: number;
+  memberId: string;
   member: Member;
   createdAt: string;
 }
@@ -374,16 +374,43 @@ export interface MeetingRecording {
   transcriptText?: string | null;
   errorMessage?: string | null;
   storageType: string;
-  createdById: number;
+  createdById: string;
   createdAt: string;
   updatedAt: string;
   segments?: MeetingTranscriptSegment[];
 }
 
+export interface MeetingMaterialActionItem {
+  title: string;
+  description: string | null;
+  ownerName: string | null;
+  dueDate: string | null;
+  priority: ActionItemPriority;
+}
+
+export interface MeetingMaterials {
+  title: string;
+  summary: string;
+  minutes: string;
+  decisions: string[];
+  actionItems: MeetingMaterialActionItem[];
+  kakaoBrief: string;
+  risks: string[];
+  followUpQuestions: string[];
+}
+
+export interface GenerateMeetingMaterialsResult {
+  materials: MeetingMaterials;
+  applied: boolean;
+  createdActionItemCount: number;
+  recordingCount: number;
+  meeting: Meeting;
+}
+
 export interface MeetingComment {
   id: number;
   meetingId: number;
-  authorId: number;
+  authorId: string;
   content: string;
   author: Member;
   createdAt: string;
@@ -413,7 +440,7 @@ export interface UpdateAgendaInput {
 export interface CreateActionItemInput {
   title: string;
   description?: string;
-  assigneeId?: number;
+  assigneeId?: string;
   dueDate?: string;
   priority?: ActionItemPriority;
 }
@@ -422,7 +449,7 @@ export interface CreateActionItemInput {
 export interface UpdateActionItemInput {
   title?: string;
   description?: string;
-  assigneeId?: number;
+  assigneeId?: string;
   dueDate?: string;
   priority?: ActionItemPriority;
   status?: ActionItemStatus;
@@ -432,11 +459,11 @@ export interface CreateMeetingInput {
   title: string;
   meetingDate: string;
   location?: string;
-  projectId?: number;
+  projectId?: string;
   content: string;
   contentType?: MeetingContentType;
   summary?: string;
-  attendeeIds: number[];
+  attendeeIds: string[];
   status?: MeetingStatus;
   agendas?: CreateAgendaInput[];
   actionItems?: CreateActionItemInput[];
@@ -446,18 +473,18 @@ export interface UpdateMeetingInput {
   title?: string;
   meetingDate?: string;
   location?: string;
-  projectId?: number;
+  projectId?: string;
   content?: string;
   contentType?: MeetingContentType;
   summary?: string;
-  attendeeIds?: number[];
+  attendeeIds?: string[];
   status?: MeetingStatus;
 }
 
 export interface MeetingFilters {
-  projectId?: number;
-  authorId?: number;
-  attendeeId?: number;
+  projectId?: string;
+  authorId?: string;
+  attendeeId?: string;
   status?: MeetingStatus;
   startDate?: string;
   endDate?: string;

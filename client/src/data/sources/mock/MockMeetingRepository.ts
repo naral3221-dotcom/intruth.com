@@ -110,10 +110,10 @@ export class MockMeetingRepository implements IMeetingRepository {
       meetingDate: data.meetingDate,
       location: data.location,
       projectId: data.projectId,
-      project: project ? { id: Number(project.id), name: project.name } : undefined,
+      project: project ? { id: project.id, name: project.name } : undefined,
       content: data.content,
       summary: data.summary,
-      authorId: Number(currentMember.id),
+      authorId: currentMember.id,
       author: currentMember,
       attendees,
       attachments: [],
@@ -163,7 +163,7 @@ export class MockMeetingRepository implements IMeetingRepository {
         ? projects.find((p) => p.id === String(data.projectId))
         : undefined;
       if (project) {
-        project = { id: Number(project.id), name: project.name };
+        project = { id: project.id, name: project.name };
       }
     }
 
@@ -278,7 +278,7 @@ export class MockMeetingRepository implements IMeetingRepository {
     const newComment: MeetingComment = {
       id: Date.now(),
       meetingId,
-      authorId: Number(currentMember.id),
+      authorId: currentMember.id,
       author: currentMember,
       content: data.content,
       createdAt: new Date().toISOString(),

@@ -12,8 +12,8 @@ interface BasicInfoStepProps {
     title: string;
     meetingDate: string;
     location: string;
-    projectId: string | number;
-    attendeeIds: number[];
+    projectId: string;
+    attendeeIds: string[];
   };
   onChange: (field: string, value: unknown) => void;
   projects: Project[];
@@ -23,19 +23,17 @@ interface BasicInfoStepProps {
 export function BasicInfoStep({ formData, onChange, projects, members }: BasicInfoStepProps) {
   const [showAttendeeDropdown, setShowAttendeeDropdown] = useState(false);
 
-  const selectedAttendees = members.filter(m => formData.attendeeIds.includes(Number(m.id)));
+  const selectedAttendees = members.filter(m => formData.attendeeIds.includes(m.id));
 
   const toggleAttendee = (memberId: string) => {
-    const numericId = Number(memberId);
-    const newIds = formData.attendeeIds.includes(numericId)
-      ? formData.attendeeIds.filter(id => id !== numericId)
-      : [...formData.attendeeIds, numericId];
+    const newIds = formData.attendeeIds.includes(memberId)
+      ? formData.attendeeIds.filter(id => id !== memberId)
+      : [...formData.attendeeIds, memberId];
     onChange('attendeeIds', newIds);
   };
 
   const removeAttendee = (memberId: string) => {
-    const numericId = Number(memberId);
-    onChange('attendeeIds', formData.attendeeIds.filter(id => id !== numericId));
+    onChange('attendeeIds', formData.attendeeIds.filter(id => id !== memberId));
   };
 
   return (
@@ -137,11 +135,11 @@ export function BasicInfoStep({ formData, onChange, projects, members }: BasicIn
                   >
                     <div className={cn(
                       'w-5 h-5 rounded border flex items-center justify-center flex-shrink-0',
-                      formData.attendeeIds.includes(Number(member.id))
+                      formData.attendeeIds.includes(member.id)
                         ? 'bg-primary border-primary'
                         : 'border-border'
                     )}>
-                      {formData.attendeeIds.includes(Number(member.id)) && (
+                      {formData.attendeeIds.includes(member.id) && (
                         <Check className="w-3 h-3 text-white" />
                       )}
                     </div>

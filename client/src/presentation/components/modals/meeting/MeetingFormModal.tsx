@@ -72,11 +72,11 @@ export function MeetingFormModal() {
     title: '',
     meetingDate: '',
     location: '',
-    projectId: '' as string | number,
+    projectId: '',
     content: '',
     contentType: 'text' as 'text' | 'json',
     summary: '',
-    attendeeIds: [] as number[],
+    attendeeIds: [] as string[],
     status: 'DRAFT' as MeetingStatus,
   });
   const [agendas, setAgendas] = useState<LocalAgenda[]>([]);
@@ -221,7 +221,7 @@ export function MeetingFormModal() {
         title: formData.title.trim(),
         meetingDate: new Date(formData.meetingDate).toISOString(),
         location: formData.location.trim() || undefined,
-        projectId: formData.projectId ? Number(formData.projectId) : undefined,
+        projectId: formData.projectId || undefined,
         content: formData.content,
         contentType: formData.contentType,
         summary: formData.summary.trim() || undefined,

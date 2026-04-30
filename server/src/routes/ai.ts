@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
-import { getAiTranscriptionService } from '../di/container.js';
+import { getAiTranscriptionService, getMeetingService } from '../di/container.js';
 import { handleError, ValidationError } from '../shared/errors.js';
 
 const router = Router();
@@ -66,6 +66,24 @@ router.post('/recordings/:recordingId/transcribe', authenticate, async (req: Aut
     const service = getAiTranscriptionService();
     const recording = await service.transcribeRecording(Number(req.params.recordingId), memberContext(req));
     res.json(recording);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.post('/meetings/:meetingId/materials', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiTranscriptionService();
+    const meetingId = Number(req.params.meetingId);
+    const result = await service.generateMeetingMaterials(meetingId, memberContext(req), {
+      recordingId: req.body?.recordingId ? Number(req.body.recordingId) : undefined,
+      applyToMeeting: req.body?.applyToMeeting !== false,
+      replaceActionItems: req.body?.replaceActionItems === true,
+    });
+
+    const meeting = await getMeetingService().findById(meetingId);
+    res.json({ ...result, meeting });
   } catch (error) {
     const { statusCode, body } = handleError(error);
     res.status(statusCode).json(body);

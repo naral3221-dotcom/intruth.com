@@ -16,6 +16,7 @@ import {
   FileDown,
   Loader2,
   Mic,
+  Sparkles,
   UploadCloud,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -29,6 +30,7 @@ import { shareMeeting } from '@/shared/share/entityShare';
 import { generateMeetingPdfFile } from '@/shared/share/meetingPdf';
 import { shareFileOrDownload } from '@/shared/share/nativeFileShare';
 import {
+  generateMeetingMaterials,
   listMeetingRecordings,
   transcribeMeetingRecording,
   uploadMeetingRecording,
@@ -63,6 +65,8 @@ export function MeetingDetailModal() {
   const [recordingsLoading, setRecordingsLoading] = useState(false);
   const [uploadingRecording, setUploadingRecording] = useState(false);
   const [transcribingRecordingId, setTranscribingRecordingId] = useState<number | null>(null);
+  const [generatingMaterials, setGeneratingMaterials] = useState(false);
+  const [generatedKakaoBrief, setGeneratedKakaoBrief] = useState<string | null>(null);
   const recordingInputRef = useRef<HTMLInputElement>(null);
 
   const meeting = viewingMeeting;
@@ -155,11 +159,14 @@ export function MeetingDetailModal() {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  const canEdit = meeting && (meeting.authorId === Number(user?.id) || user?.userRole === 'admin');
+  const canEdit = meeting && (meeting.authorId === user?.id || user?.userRole === 'admin');
 
   if (!isMeetingDetailModalOpen || !meeting) return null;
 
   const meetingDate = parseISO(meeting.meetingDate);
+  const hasTranscribedRecording = recordings.some((recording) => (
+    recording.status === 'TRANSCRIBED' && Boolean(recording.transcriptText || recording.segments?.length)
+  ));
 
   const notifyShareResult = (result: ShareResult, downloadedMessage = '파일을 내려받았습니다.') => {
     if (result === 'kakao' || result === 'native') {
@@ -244,6 +251,37 @@ export function MeetingDetailModal() {
       toast.error('전사에 실패했습니다.', message);
     } finally {
       setTranscribingRecordingId(null);
+    }
+  };
+
+  const handleGenerateMaterials = async () => {
+    if (!meeting) return;
+
+    setGeneratingMaterials(true);
+    setGeneratedKakaoBrief(null);
+    try {
+      const result = await generateMeetingMaterials(meeting.id, {
+        applyToMeeting: true,
+        replaceActionItems: false,
+      });
+
+      useUIStore.setState({ viewingMeeting: result.meeting });
+      useMeetingStore.setState((state) => ({
+        meetings: state.meetings.map((item) => (
+          item.id === result.meeting.id ? result.meeting : item
+        )),
+        currentMeeting: state.currentMeeting?.id === result.meeting.id ? result.meeting : state.currentMeeting,
+      }));
+
+      setGeneratedKakaoBrief(result.materials.kakaoBrief);
+      toast.success(
+        'AI 회의자료를 생성했습니다.',
+        `녹음 ${result.recordingCount}개를 반영했고 할 일 ${result.createdActionItemCount}개를 추가했습니다.`
+      );
+    } catch (error) {
+      toast.error('AI 회의자료 생성에 실패했습니다.', (error as Error).message);
+    } finally {
+      setGeneratingMaterials(false);
     }
   };
 
@@ -438,15 +476,26 @@ export function MeetingDetailModal() {
                       className="hidden"
                       onChange={(event) => void handleRecordingUpload(event)}
                     />
-                    <button
-                      type="button"
-                      onClick={() => recordingInputRef.current?.click()}
-                      disabled={!aiServerEnabled || uploadingRecording}
-                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-60"
-                    >
-                      {uploadingRecording ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                      녹음 업로드
-                    </button>
+                    <div className="grid grid-cols-2 gap-2 sm:flex">
+                      <button
+                        type="button"
+                        onClick={() => recordingInputRef.current?.click()}
+                        disabled={!aiServerEnabled || uploadingRecording}
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+                      >
+                        {uploadingRecording ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                        녹음 업로드
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerateMaterials()}
+                        disabled={!aiServerEnabled || !hasTranscribedRecording || generatingMaterials}
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+                      >
+                        {generatingMaterials ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        AI 자료 생성
+                      </button>
+                    </div>
                   </div>
 
                   {!aiServerEnabled ? (
@@ -523,6 +572,18 @@ export function MeetingDetailModal() {
                       <UploadCloud className="h-5 w-5 text-primary" />
                       <span className="text-sm font-semibold text-foreground">회의 녹음을 업로드해 전사 준비하기</span>
                     </button>
+                  )}
+
+                  {generatedKakaoBrief && (
+                    <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                      <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-primary">
+                        <Sparkles className="h-4 w-4" />
+                        생성된 카카오 공유 요약
+                      </p>
+                      <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">
+                        {generatedKakaoBrief}
+                      </p>
+                    </div>
                   )}
                 </div>
 
@@ -612,7 +673,7 @@ export function MeetingDetailModal() {
                                 {format(parseISO(comment.createdAt), 'M/d HH:mm')}
                               </span>
                             </div>
-                            {(comment.authorId === Number(user?.id) || user?.userRole === 'admin') && (
+                            {(comment.authorId === user?.id || user?.userRole === 'admin') && (
                               <button
                                 onClick={() => handleDeleteComment(comment.id)}
                                 className="p-1 text-muted-foreground hover:text-destructive transition-colors"

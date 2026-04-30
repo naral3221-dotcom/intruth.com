@@ -34,7 +34,7 @@ export interface UpdateAgendaInput {
 export interface CreateActionItemInput {
   title: string;
   description?: string;
-  assigneeId?: number;
+  assigneeId?: string;
   dueDate?: Date;
   priority?: ActionItemPriority;
 }
@@ -42,7 +42,7 @@ export interface CreateActionItemInput {
 export interface UpdateActionItemInput {
   title?: string;
   description?: string;
-  assigneeId?: number;
+  assigneeId?: string;
   dueDate?: Date;
   priority?: ActionItemPriority;
   status?: ActionItemStatus;
@@ -52,11 +52,11 @@ export interface CreateMeetingInput {
   title: string;
   meetingDate: Date;
   location?: string;
-  projectId?: number | null;
+  projectId?: string | null;
   content?: string;
   contentType?: MeetingContentType;
   summary?: string;
-  attendeeIds?: number[];
+  attendeeIds?: string[];
   status?: MeetingStatus;
   agendas?: CreateAgendaInput[];
   actionItems?: CreateActionItemInput[];
@@ -66,18 +66,18 @@ export interface UpdateMeetingInput {
   title?: string;
   meetingDate?: Date;
   location?: string;
-  projectId?: number | null;
+  projectId?: string | null;
   content?: string;
   contentType?: MeetingContentType;
   summary?: string;
-  attendeeIds?: number[];
+  attendeeIds?: string[];
   status?: MeetingStatus;
 }
 
 export interface MeetingListParams {
-  projectId?: number;
-  authorId?: number;
-  attendeeId?: number;
+  projectId?: string;
+  authorId?: string;
+  attendeeId?: string;
   status?: MeetingStatus;
   startDate?: Date;
   endDate?: Date;
@@ -108,34 +108,33 @@ export class MeetingService {
   /**
    * 멤버 정보 조회 헬퍼
    */
-  private async getMemberInfo(memberId: number) {
+  private async getMemberInfo(memberId: string) {
     const member = await this.prisma.member.findUnique({
-      where: { id: String(memberId) },
+      where: { id: memberId },
       select: { id: true, name: true, avatarUrl: true, department: true, position: true },
     });
-    return member ? { ...member, id: Number(member.id) } : null;
+    return member;
   }
 
   /**
    * 프로젝트 정보 조회 헬퍼
    */
-  private async getProjectInfo(projectId: number | null) {
+  private async getProjectInfo(projectId: string | null) {
     if (!projectId) return null;
     const project = await this.prisma.project.findUnique({
-      where: { id: String(projectId) },
+      where: { id: projectId },
       select: { id: true, name: true },
     });
-    return project ? { ...project, id: Number(project.id) } : null;
+    return project;
   }
 
   /**
    * 작성자/관리자 권한 확인
    */
-  private checkPermission(authorId: number, member: MemberContext): void {
-    const currentMemberId = Number(member.id);
+  private checkPermission(authorId: string, member: MemberContext): void {
     const isAdmin = member.permissions?.system?.manage_settings;
 
-    if (authorId !== currentMemberId && !isAdmin) {
+    if (authorId !== member.id && !isAdmin) {
       throw new ForbiddenError('권한이 없습니다.');
     }
   }
@@ -264,7 +263,7 @@ export class MeetingService {
   /**
    * 회의자료 생성
    */
-  async create(input: CreateMeetingInput, authorId: number) {
+  async create(input: CreateMeetingInput, authorId: string) {
     if (!input.title?.trim()) {
       throw new ValidationError('제목을 입력해주세요.');
     }
@@ -282,7 +281,7 @@ export class MeetingService {
         status: input.status || 'DRAFT',
         attendees: {
           create: (input.attendeeIds || []).map((memberId) => ({
-            memberId: Number(memberId),
+            memberId,
           })),
         },
         agendas: input.agendas
@@ -376,7 +375,7 @@ export class MeetingService {
         ...(input.attendeeIds !== undefined && {
           attendees: {
             create: input.attendeeIds.map((memberId) => ({
-              memberId: Number(memberId),
+              memberId,
             })),
           },
         }),
@@ -530,7 +529,7 @@ export class MeetingService {
   /**
    * 댓글 작성
    */
-  async createComment(meetingId: number, content: string, authorId: number) {
+  async createComment(meetingId: number, content: string, authorId: string) {
     if (!content?.trim()) {
       throw new ValidationError('댓글 내용을 입력해주세요.');
     }

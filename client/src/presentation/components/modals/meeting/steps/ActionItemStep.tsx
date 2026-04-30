@@ -67,9 +67,9 @@ export function ActionItemStep({ actionItems, onChange, members }: ActionItemSte
     ));
   };
 
-  const getAssigneeName = (assigneeId?: number) => {
+  const getAssigneeName = (assigneeId?: string) => {
     if (!assigneeId) return null;
-    const member = members.find(m => Number(m.id) === assigneeId);
+    const member = members.find(m => m.id === assigneeId);
     return member?.name;
   };
 
@@ -225,7 +225,7 @@ export function ActionItemStep({ actionItems, onChange, members }: ActionItemSte
                 value={formData.assigneeId || ''}
                 onChange={(e) => setFormData(prev => ({
                   ...prev,
-                  assigneeId: e.target.value ? Number(e.target.value) : undefined
+                  assigneeId: e.target.value || undefined
                 }))}
                 className="aboard-input mt-1"
               >

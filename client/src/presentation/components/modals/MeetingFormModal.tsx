@@ -21,10 +21,10 @@ export function MeetingFormModal() {
     title: '',
     meetingDate: '',
     location: '',
-    projectId: '' as string | number,
+    projectId: '',
     content: '',
     summary: '',
-    attendeeIds: [] as number[],
+    attendeeIds: [] as string[],
     status: 'DRAFT' as MeetingStatus,
   });
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -67,24 +67,22 @@ export function MeetingFormModal() {
   }, [editingMeeting, isMeetingModalOpen]);
 
   const toggleAttendee = (memberId: string) => {
-    const numericId = Number(memberId);
     setFormData(prev => ({
       ...prev,
-      attendeeIds: prev.attendeeIds.includes(numericId)
-        ? prev.attendeeIds.filter(id => id !== numericId)
-        : [...prev.attendeeIds, numericId]
+      attendeeIds: prev.attendeeIds.includes(memberId)
+        ? prev.attendeeIds.filter(id => id !== memberId)
+        : [...prev.attendeeIds, memberId]
     }));
   };
 
   const removeAttendee = (memberId: string) => {
-    const numericId = Number(memberId);
     setFormData(prev => ({
       ...prev,
-      attendeeIds: prev.attendeeIds.filter(id => id !== numericId)
+      attendeeIds: prev.attendeeIds.filter(id => id !== memberId)
     }));
   };
 
-  const selectedAttendees = members.filter(m => formData.attendeeIds.includes(Number(m.id)));
+  const selectedAttendees = members.filter(m => formData.attendeeIds.includes(m.id));
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -134,7 +132,7 @@ export function MeetingFormModal() {
         title: formData.title.trim(),
         meetingDate: new Date(formData.meetingDate).toISOString(),
         location: formData.location.trim() || undefined,
-        projectId: formData.projectId ? Number(formData.projectId) : undefined,
+        projectId: formData.projectId || undefined,
         content: formData.content,
         summary: formData.summary.trim() || undefined,
         attendeeIds: formData.attendeeIds,
@@ -345,11 +343,11 @@ export function MeetingFormModal() {
                               >
                                 <div className={cn(
                                   'w-5 h-5 rounded border flex items-center justify-center',
-                                  formData.attendeeIds.includes(Number(member.id))
+                      formData.attendeeIds.includes(member.id)
                                     ? 'bg-primary border-primary'
                                     : 'border-border'
                                 )}>
-                                  {formData.attendeeIds.includes(Number(member.id)) && (
+                      {formData.attendeeIds.includes(member.id) && (
                                     <Check className="w-3 h-3 text-white" />
                                   )}
                                 </div>
