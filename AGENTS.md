@@ -127,6 +127,8 @@
 │           └── PwaInstallPrompt.tsx        # PWA 설치 안내
 │
 ├── shared/                        # 클라이언트 공통 유틸리티
+│   ├── ai/                        # AI 기능 API 유틸리티
+│   │   └── meetingRecordingApi.ts # 회의 녹음 업로드/전사 API
 │   ├── pwa/                       # PWA 등록/설치 프롬프트
 │   │   ├── registerServiceWorker.ts
 │   │   └── useInstallPrompt.ts
@@ -167,7 +169,9 @@
 │   ├── ActivityLogService.ts
 │   ├── TaskService.ts
 │   ├── ProjectService.ts
-│   └── MemberService.ts
+│   ├── MemberService.ts
+│   └── ai/
+│       └── AiTranscriptionService.ts  # 회의 녹음 업로드/전사
 │
 ├── di/                            # 의존성 주입
 │   └── container.ts               # DI Container
@@ -176,6 +180,7 @@
 │   ├── tasks.ts                   # Service 사용
 │   ├── projects.ts
 │   ├── members.ts
+│   ├── ai.ts                      # AI 회의 녹음/전사
 │   └── ...
 │
 ├── middleware/
@@ -294,6 +299,9 @@ VITE_KAKAO_JAVASCRIPT_KEY=    # Kakao JavaScript SDK 키 (선택)
 ```
 DATABASE_URL=                  # Prisma DB 연결 문자열
 NODE_ENV=development|production
+OPENAI_API_KEY=                # OpenAI API 키 (AI 전사/에이전트 기능)
+OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe  # 전사 모델
+OPENAI_TRANSCRIBE_PROMPT=      # 한국어/교회 용어 전사용 추가 문맥
 ```
 
 ---
@@ -308,8 +316,11 @@ NODE_ENV=development|production
 | Task Use Case | `client/src/domain/usecases/task/` |
 | DI Provider | `client/src/di/RepositoryProvider.tsx` |
 | 서버 Task Service | `server/src/services/TaskService.ts` |
+| 서버 AI 전사 Service | `server/src/services/ai/AiTranscriptionService.ts` |
+| 서버 AI 라우트 | `server/src/routes/ai.ts` |
 | 서버 DI Container | `server/src/di/container.ts` |
 | 에러 클래스 | `server/src/shared/errors.ts` |
+| 클라이언트 회의 녹음 API | `client/src/shared/ai/meetingRecordingApi.ts` |
 
 ---
 
@@ -323,7 +334,7 @@ NODE_ENV=development|production
 - [x] Repository 계층 (Task, Project, Member, Team, Dashboard, Auth, Routine, Meeting, Admin)
 - [x] Use Case 계층 (Task, Project)
 - [x] 클라이언트 DI (RepositoryProvider)
-- [x] 서버 Service 계층 (Task, Project, Member, Dashboard, Auth, Meeting)
+- [x] 서버 Service 계층 (Task, Project, Member, Dashboard, Auth, Meeting, AI Transcription)
 - [x] 서버 DI Container
 - [x] routes/tasks.ts 마이그레이션
 - [x] routes/projects.ts 마이그레이션
@@ -338,11 +349,13 @@ NODE_ENV=development|production
 - [x] 모바일 하단 내비게이션 및 빠른 추가 액션 시트
 - [x] 카카오 링크 공유 및 회의자료 PDF 파일 공유 1차 구현
 - [x] 모바일 홈 대시보드 및 업무/회의 딥링크 처리
+- [x] AI 회의 녹음 업로드/전사 기반 1차 구현
 
 **향후 작업:**
 - [ ] OneDriveStorageService 구현 (서버 배포 시)
 - [ ] Kakao Developers 앱 JavaScript 키/도메인/공유 설정
 - [ ] 서버 기반 자료 공유 링크 및 장기 저장 설계
+- [ ] AI 회의자료 초안 생성 및 승인 기반 업무 생성
 
 ---
 

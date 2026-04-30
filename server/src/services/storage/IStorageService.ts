@@ -54,4 +54,10 @@ export interface IStorageService {
    * 파일 다운로드 URL 또는 경로 반환
    */
   getFileUrl(fileId: string, folder: string): Promise<string>;
+
+  /**
+   * 파일 버퍼 읽기
+   * AI 전사/분석처럼 서버 내부에서 파일 원본이 필요한 작업에 사용
+   */
+  readFile(fileId: string, folder: string): Promise<Buffer>;
 }

@@ -348,6 +348,38 @@ export interface MeetingAttachment {
   uploadedAt: string;
 }
 
+export type MeetingRecordingStatus = 'UPLOADED' | 'TRANSCRIBING' | 'TRANSCRIBED' | 'FAILED';
+
+export interface MeetingTranscriptSegment {
+  id: number;
+  recordingId: number;
+  order: number;
+  speaker?: string | null;
+  startSeconds?: number | null;
+  endSeconds?: number | null;
+  text: string;
+  confidence?: number | null;
+}
+
+export interface MeetingRecording {
+  id: number;
+  meetingId: number;
+  fileName: string;
+  storedName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  durationSeconds?: number | null;
+  status: MeetingRecordingStatus;
+  transcriptText?: string | null;
+  errorMessage?: string | null;
+  storageType: string;
+  createdById: number;
+  createdAt: string;
+  updatedAt: string;
+  segments?: MeetingTranscriptSegment[];
+}
+
 export interface MeetingComment {
   id: number;
   meetingId: number;

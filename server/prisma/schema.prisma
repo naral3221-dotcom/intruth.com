@@ -189,6 +189,7 @@ model Meeting {
   comments    MeetingComment[]
   agendas     MeetingAgenda[]
   actionItems MeetingActionItem[]
+  recordings  MeetingRecording[]
 
   @@map("wf_meetings")
 }
@@ -266,6 +267,48 @@ model MeetingActionItem {
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@map("wf_meeting_action_items")
+}
+
+model MeetingRecording {
+  id              Int      @id @default(autoincrement())
+  meetingId       Int      @map("meeting_id")
+  fileName        String   @map("file_name")
+  storedName      String   @map("stored_name")
+  filePath        String   @map("file_path")
+  fileSize        Int      @map("file_size")
+  mimeType        String   @map("mime_type")
+  durationSeconds Int?     @map("duration_seconds")
+  status          String   @default("UPLOADED") // UPLOADED, TRANSCRIBING, TRANSCRIBED, FAILED
+  transcriptText  String?  @map("transcript_text")
+  errorMessage    String?  @map("error_message")
+  oneDriveId      String?  @map("onedrive_id")
+  storageType     String   @default("local") @map("storage_type")
+  createdById     Int      @map("created_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  meeting  Meeting                    @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  segments MeetingTranscriptSegment[]
+
+  @@index([meetingId])
+  @@index([createdById])
+  @@map("wf_meeting_recordings")
+}
+
+model MeetingTranscriptSegment {
+  id           Int     @id @default(autoincrement())
+  recordingId  Int     @map("recording_id")
+  order        Int     @default(0)
+  speaker      String?
+  startSeconds Float?  @map("start_seconds")
+  endSeconds   Float?  @map("end_seconds")
+  text         String
+  confidence   Float?
+
+  recording MeetingRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+
+  @@index([recordingId])
+  @@map("wf_meeting_transcript_segments")
 }
 
 // ==================== 셀 그룹 출석 관리 모델 ====================

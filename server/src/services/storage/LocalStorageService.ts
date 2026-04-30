@@ -84,6 +84,11 @@ export class LocalStorageService implements IStorageService {
     return `${this.baseUrl}/${folder}/${fileId}`;
   }
 
+  async readFile(fileId: string, folder: string): Promise<Buffer> {
+    const filePath = path.join(this.baseDir, folder, fileId);
+    return fs.readFileSync(filePath);
+  }
+
   /**
    * 확장자 기반 MIME 타입 추정
    */

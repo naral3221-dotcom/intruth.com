@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -15,6 +15,8 @@ import {
   MessageCircle,
   FileDown,
   Loader2,
+  Mic,
+  UploadCloud,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -22,10 +24,31 @@ import { useMeetingStore } from '@/stores/meetingStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/stores/toastStore';
+import { cn } from '@/core/utils/cn';
 import { shareMeeting } from '@/shared/share/entityShare';
 import { generateMeetingPdfFile } from '@/shared/share/meetingPdf';
 import { shareFileOrDownload } from '@/shared/share/nativeFileShare';
+import {
+  listMeetingRecordings,
+  transcribeMeetingRecording,
+  uploadMeetingRecording,
+} from '@/shared/ai/meetingRecordingApi';
+import type { MeetingRecording } from '@/types';
 import type { ShareResult } from '@/shared/share/kakaoShare';
+
+const recordingStatusLabel: Record<MeetingRecording['status'], string> = {
+  UPLOADED: '업로드됨',
+  TRANSCRIBING: '전사 중',
+  TRANSCRIBED: '전사 완료',
+  FAILED: '실패',
+};
+
+const recordingStatusClass: Record<MeetingRecording['status'], string> = {
+  UPLOADED: 'aboard-badge-info',
+  TRANSCRIBING: 'aboard-badge-warning',
+  TRANSCRIBED: 'aboard-badge-success',
+  FAILED: 'aboard-badge-warning',
+};
 
 export function MeetingDetailModal() {
   const { isMeetingDetailModalOpen, viewingMeeting, closeMeetingDetailModal, openEditMeetingModal, openConfirmModal } = useUIStore();
@@ -36,8 +59,39 @@ export function MeetingDetailModal() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [sharingKakao, setSharingKakao] = useState(false);
   const [sharingPdf, setSharingPdf] = useState(false);
+  const [recordings, setRecordings] = useState<MeetingRecording[]>([]);
+  const [recordingsLoading, setRecordingsLoading] = useState(false);
+  const [uploadingRecording, setUploadingRecording] = useState(false);
+  const [transcribingRecordingId, setTranscribingRecordingId] = useState<number | null>(null);
+  const recordingInputRef = useRef<HTMLInputElement>(null);
 
   const meeting = viewingMeeting;
+  const aiServerEnabled = import.meta.env.VITE_USE_MOCK !== 'true';
+
+  useEffect(() => {
+    if (!isMeetingDetailModalOpen || !meeting || !aiServerEnabled) {
+      setRecordings([]);
+      return;
+    }
+
+    let cancelled = false;
+    setRecordingsLoading(true);
+
+    listMeetingRecordings(meeting.id)
+      .then((items) => {
+        if (!cancelled) setRecordings(items);
+      })
+      .catch((error) => {
+        if (!cancelled) toast.error('녹음 목록을 불러오지 못했습니다.', (error as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setRecordingsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aiServerEnabled, isMeetingDetailModalOpen, meeting]);
 
   const handleClose = () => {
     closeMeetingDetailModal();
@@ -152,6 +206,44 @@ export function MeetingDetailModal() {
       toast.error('PDF 공유에 실패했습니다.');
     } finally {
       setSharingPdf(false);
+    }
+  };
+
+  const handleRecordingUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!meeting || !file) return;
+
+    setUploadingRecording(true);
+    try {
+      const recording = await uploadMeetingRecording(meeting.id, file);
+      setRecordings((prev) => [recording, ...prev]);
+      toast.success('녹음 파일을 업로드했습니다.');
+    } catch (error) {
+      toast.error('녹음 업로드에 실패했습니다.', (error as Error).message);
+    } finally {
+      setUploadingRecording(false);
+    }
+  };
+
+  const handleTranscribeRecording = async (recordingId: number) => {
+    setTranscribingRecordingId(recordingId);
+    setRecordings((prev) => prev.map((recording) => (
+      recording.id === recordingId ? { ...recording, status: 'TRANSCRIBING', errorMessage: null } : recording
+    )));
+
+    try {
+      const recording = await transcribeMeetingRecording(recordingId);
+      setRecordings((prev) => prev.map((item) => (item.id === recording.id ? recording : item)));
+      toast.success('회의 녹음을 전사했습니다.');
+    } catch (error) {
+      const message = (error as Error).message;
+      setRecordings((prev) => prev.map((recording) => (
+        recording.id === recordingId ? { ...recording, status: 'FAILED', errorMessage: message } : recording
+      )));
+      toast.error('전사에 실패했습니다.', message);
+    } finally {
+      setTranscribingRecordingId(null);
     }
   };
 
@@ -326,6 +418,113 @@ export function MeetingDetailModal() {
                     </div>
                   </div>
                 )}
+
+                {/* AI 회의 녹음 */}
+                <div>
+                  <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Mic className="h-4 w-4" />
+                        AI 회의 녹음
+                      </h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        녹음 파일을 업로드하면 서버에서 보관하고, OpenAI 키가 설정된 환경에서 전사할 수 있습니다.
+                      </p>
+                    </div>
+                    <input
+                      ref={recordingInputRef}
+                      type="file"
+                      accept="audio/*,video/mp4"
+                      className="hidden"
+                      onChange={(event) => void handleRecordingUpload(event)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => recordingInputRef.current?.click()}
+                      disabled={!aiServerEnabled || uploadingRecording}
+                      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+                    >
+                      {uploadingRecording ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                      녹음 업로드
+                    </button>
+                  </div>
+
+                  {!aiServerEnabled ? (
+                    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                      현재 Mock 모드입니다. 서버 모드에서 녹음 업로드와 전사를 사용할 수 있습니다.
+                    </div>
+                  ) : recordingsLoading ? (
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      녹음 목록을 불러오는 중...
+                    </div>
+                  ) : recordings.length > 0 ? (
+                    <div className="space-y-3">
+                      {recordings.map((recording) => {
+                        const transcriptPreview = recording.segments?.length
+                          ? recording.segments.map((segment) => (
+                              `${segment.speaker ? `${segment.speaker}: ` : ''}${segment.text}`
+                            )).join('\n')
+                          : recording.transcriptText;
+                        const canTranscribe = recording.status === 'UPLOADED' || recording.status === 'FAILED';
+
+                        return (
+                          <div key={recording.id} className="rounded-lg border border-border bg-muted/30 p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="truncate text-sm font-semibold text-foreground">{recording.fileName}</p>
+                                  <span className={cn('aboard-badge text-[10px]', recordingStatusClass[recording.status])}>
+                                    {recordingStatusLabel[recording.status]}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {formatFileSize(recording.fileSize)} · {format(parseISO(recording.createdAt), 'M/d HH:mm')}
+                                </p>
+                                {recording.errorMessage && (
+                                  <p className="mt-2 text-xs text-amber-600">{recording.errorMessage}</p>
+                                )}
+                              </div>
+                              {canTranscribe && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleTranscribeRecording(recording.id)}
+                                  disabled={transcribingRecordingId === recording.id}
+                                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+                                >
+                                  {transcribingRecordingId === recording.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <FileText className="h-4 w-4" />
+                                  )}
+                                  전사하기
+                                </button>
+                              )}
+                            </div>
+
+                            {recording.status === 'TRANSCRIBED' && transcriptPreview && (
+                              <div className="mt-3 rounded-lg border border-border bg-card p-3">
+                                <p className="mb-2 text-xs font-semibold text-muted-foreground">전사 결과</p>
+                                <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-foreground">
+                                  {transcriptPreview}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => recordingInputRef.current?.click()}
+                      className="flex w-full items-center gap-3 rounded-lg border border-dashed border-border bg-card p-4 text-left transition-colors hover:bg-muted"
+                    >
+                      <UploadCloud className="h-5 w-5 text-primary" />
+                      <span className="text-sm font-semibold text-foreground">회의 녹음을 업로드해 전사 준비하기</span>
+                    </button>
+                  )}
+                </div>
 
                 {/* 첨부파일 */}
                 {meeting.attachments && meeting.attachments.length > 0 && (
