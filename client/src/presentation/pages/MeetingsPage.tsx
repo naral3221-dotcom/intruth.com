@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -12,6 +13,7 @@ import {
   MapPin,
   ChevronDown,
   Clock,
+  Share2,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ko } from "date-fns/locale";
@@ -21,6 +23,9 @@ import { useMemberStore } from "@/stores/memberStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useContextMenuWithLongPress } from "@/presentation/components/context-menu";
 import { LongPressRipple } from "@/presentation/components/ui/LongPressRipple";
+import { toast } from "@/stores/toastStore";
+import { shareMeeting } from "@/shared/share/entityShare";
+import type { ShareResult } from "@/shared/share/kakaoShare";
 import type { Meeting, MeetingFilters, MeetingStatus } from "@/types";
 
 export function MeetingsPage() {
@@ -43,10 +48,47 @@ export function MeetingsPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     fetchMeetings();
   }, [fetchMeetings]);
+
+  useEffect(() => {
+    const meetingId = Number(searchParams.get("meetingId"));
+    if (!meetingId || loading || meetings.length === 0) return;
+
+    const linkedMeeting = meetings.find((meeting) => meeting.id === meetingId);
+    if (!linkedMeeting) return;
+
+    openMeetingDetailModal(linkedMeeting);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("meetingId");
+    setSearchParams(nextParams, { replace: true });
+  }, [loading, meetings, openMeetingDetailModal, searchParams, setSearchParams]);
+
+  const notifyShareResult = (result: ShareResult) => {
+    if (result === "kakao" || result === "native") {
+      toast.success("공유 화면을 열었습니다.");
+      return;
+    }
+
+    if (result === "copied") {
+      toast.success("공유 내용을 복사했습니다.");
+      return;
+    }
+
+    toast.info("공유를 완료했습니다.");
+  };
+
+  const handleShareMeeting = async (meeting: Meeting) => {
+    try {
+      const result = await shareMeeting(meeting);
+      notifyShareResult(result);
+    } catch {
+      toast.error("회의자료 공유에 실패했습니다.");
+    }
+  };
 
   const filteredMeetings = useMemo(() => {
     let result = meetings;
@@ -300,6 +342,7 @@ export function MeetingsPage() {
                 meeting={meeting}
                 index={index}
                 onClick={() => openMeetingDetailModal(meeting)}
+                onShare={() => void handleShareMeeting(meeting)}
               />
             ))}
           </div>
@@ -314,9 +357,10 @@ interface MeetingCardProps {
   meeting: Meeting;
   index: number;
   onClick: () => void;
+  onShare: () => void;
 }
 
-function MeetingCard({ meeting, index, onClick }: MeetingCardProps) {
+function MeetingCard({ meeting, index, onClick, onShare }: MeetingCardProps) {
   const meetingDate = parseISO(meeting.meetingDate);
 
   // 우클릭 / Long Press 지원
@@ -404,7 +448,7 @@ function MeetingCard({ meeting, index, onClick }: MeetingCardProps) {
         </div>
 
         {/* Meta Info */}
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           {(meeting._count?.attachments ?? 0) > 0 && (
             <span className="flex items-center gap-1">
               <Paperclip className="w-4 h-4" />
@@ -417,6 +461,18 @@ function MeetingCard({ meeting, index, onClick }: MeetingCardProps) {
               {meeting._count?.comments}
             </span>
           )}
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onShare();
+            }}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+            title="카카오 공유"
+            aria-label="카카오 공유"
+          >
+            <Share2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </motion.div>

@@ -12,12 +12,17 @@ import {
   ListTodo,
   TrendingUp,
   Edit3,
-  Trash2
+  Trash2,
+  MessageCircle,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { useProjectStore } from '@/stores/projectStore';
 import { useTaskStore } from '@/stores/taskStore';
 import { useUIStore } from '@/stores/uiStore';
+import { toast } from '@/stores/toastStore';
+import { shareProject } from '@/shared/share/entityShare';
+import type { ShareResult } from '@/shared/share/kakaoShare';
 
 // 프로젝트 상태 설정
 const PROJECT_STATUS_CONFIG = {
@@ -71,6 +76,7 @@ export function ProjectProgressModal() {
 
   const [selectedStatus, setSelectedStatus] = useState<ProjectStatus>('ACTIVE');
   const [loading, setLoading] = useState(false);
+  const [sharingKakao, setSharingKakao] = useState(false);
 
   // 프로젝트의 업무 통계 계산
   const taskStats = useMemo(() => {
@@ -103,13 +109,9 @@ export function ProjectProgressModal() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const proj = currentProject as any;
 
-    console.log('[ProjectProgressModal] currentProject:', currentProject);
-    console.log('[ProjectProgressModal] teamAssignments:', proj.teamAssignments);
-
     if (proj.teamAssignments?.length) {
       const assigneeMap = new Map<string, { id: string; name: string; avatarUrl?: string; position?: string }>();
       proj.teamAssignments.forEach((ta: { assignees?: Array<{ id: string; name: string; avatarUrl?: string; position?: string }> }) => {
-        console.log('[ProjectProgressModal] ta.assignees:', ta.assignees);
         ta.assignees?.forEach(a => {
           if (!assigneeMap.has(a.id)) {
             assigneeMap.set(a.id, { id: a.id, name: a.name, avatarUrl: a.avatarUrl, position: a.position });
@@ -171,6 +173,34 @@ export function ProjectProgressModal() {
     });
   };
 
+  const notifyShareResult = (result: ShareResult) => {
+    if (result === 'kakao' || result === 'native') {
+      toast.success('공유 화면을 열었습니다.');
+      return;
+    }
+
+    if (result === 'copied') {
+      toast.success('공유 내용을 복사했습니다.');
+      return;
+    }
+
+    toast.info('공유를 완료했습니다.');
+  };
+
+  const handleKakaoShare = async () => {
+    if (!currentProject) return;
+
+    setSharingKakao(true);
+    try {
+      const result = await shareProject(currentProject);
+      notifyShareResult(result);
+    } catch {
+      toast.error('프로젝트 공유에 실패했습니다.');
+    } finally {
+      setSharingKakao(false);
+    }
+  };
+
   if (!currentProject) return null;
 
   const currentConfig = PROJECT_STATUS_CONFIG[selectedStatus];
@@ -187,35 +217,35 @@ export function ProjectProgressModal() {
             onClick={closeProjectProgressModal}
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg"
+            className="fixed inset-x-0 bottom-0 z-50 w-full sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2"
           >
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+            <div className="flex h-[100dvh] flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
               {/* Header */}
-              <div className="relative px-6 py-5 border-b border-gray-200 dark:border-slate-700">
+              <div className="relative shrink-0 border-b border-gray-200 px-4 py-4 dark:border-slate-700 sm:px-6 sm:py-5">
                 <div className={cn(
                   "absolute inset-0 opacity-10 dark:opacity-20 bg-gradient-to-r",
                   currentConfig.gradient
                 )} />
                 <div className="relative flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className={cn(
-                      "w-10 h-10 rounded-xl flex items-center justify-center",
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
                       currentConfig.bgColor
                     )}>
                       <FolderKanban className={cn("w-5 h-5", currentConfig.color)} />
                     </div>
-                    <div>
-                      <h2 className="text-xl font-semibold text-foreground">
+                    <div className="min-w-0">
+                      <h2 className="truncate text-lg font-semibold text-foreground sm:text-xl">
                         {currentProject.name}
                       </h2>
                       <p className="text-sm text-muted-foreground">프로젝트 진행상황 관리</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="ml-2 flex shrink-0 items-center gap-1 sm:gap-2">
                     <button
                       onClick={handleEdit}
                       className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
@@ -241,7 +271,7 @@ export function ProjectProgressModal() {
               </div>
 
               {/* Content */}
-              <div className="p-6 space-y-6">
+              <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-5 sm:p-6">
                 {/* 진행률 표시 */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -264,7 +294,7 @@ export function ProjectProgressModal() {
                 </div>
 
                 {/* 업무 통계 */}
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="p-3 rounded-xl bg-gray-500/10 border border-gray-500/20 text-center">
                     <div className="text-lg font-bold text-gray-600 dark:text-gray-300">{taskStats.todo}</div>
                     <div className="text-xs text-muted-foreground">대기</div>
@@ -376,7 +406,7 @@ export function ProjectProgressModal() {
                   <label className="text-sm font-medium text-foreground">
                     프로젝트 상태 변경
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {STATUS_ORDER.map((status) => {
                       const config = PROJECT_STATUS_CONFIG[status];
                       const Icon = config.icon;
@@ -439,10 +469,18 @@ export function ProjectProgressModal() {
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50 flex justify-end">
+              <div className="shrink-0 border-t border-gray-200 bg-gray-50 px-5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 dark:border-slate-700 dark:bg-slate-800/50 sm:flex sm:items-center sm:justify-between sm:gap-2 sm:px-6 sm:pb-4 sm:pt-4">
+                <button
+                  onClick={() => void handleKakaoShare()}
+                  disabled={sharingKakao}
+                  className="mb-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#FEE500] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#f2da00] disabled:opacity-60 sm:mb-0 sm:w-auto"
+                >
+                  {sharingKakao ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                  카카오 공유
+                </button>
                 <button
                   onClick={closeProjectProgressModal}
-                  className="aboard-btn-primary"
+                  className="aboard-btn-primary min-h-11 w-full justify-center sm:w-auto"
                 >
                   닫기
                 </button>

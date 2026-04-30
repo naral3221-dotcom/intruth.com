@@ -12,12 +12,20 @@ import {
   Trash2,
   Download,
   Send,
+  MessageCircle,
+  FileDown,
+  Loader2,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
+import { toast } from '@/stores/toastStore';
+import { shareMeeting } from '@/shared/share/entityShare';
+import { generateMeetingPdfFile } from '@/shared/share/meetingPdf';
+import { shareFileOrDownload } from '@/shared/share/nativeFileShare';
+import type { ShareResult } from '@/shared/share/kakaoShare';
 
 export function MeetingDetailModal() {
   const { isMeetingDetailModalOpen, viewingMeeting, closeMeetingDetailModal, openEditMeetingModal, openConfirmModal } = useUIStore();
@@ -26,6 +34,8 @@ export function MeetingDetailModal() {
 
   const [commentContent, setCommentContent] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [sharingKakao, setSharingKakao] = useState(false);
+  const [sharingPdf, setSharingPdf] = useState(false);
 
   const meeting = viewingMeeting;
 
@@ -97,6 +107,54 @@ export function MeetingDetailModal() {
 
   const meetingDate = parseISO(meeting.meetingDate);
 
+  const notifyShareResult = (result: ShareResult, downloadedMessage = '파일을 내려받았습니다.') => {
+    if (result === 'kakao' || result === 'native') {
+      toast.success('공유 화면을 열었습니다.');
+      return;
+    }
+
+    if (result === 'copied') {
+      toast.success('공유 내용을 복사했습니다.');
+      return;
+    }
+
+    if (result === 'downloaded') {
+      toast.success(downloadedMessage);
+      return;
+    }
+
+    toast.info('공유를 완료했습니다.');
+  };
+
+  const handleKakaoShare = async () => {
+    setSharingKakao(true);
+    try {
+      const result = await shareMeeting(meeting);
+      notifyShareResult(result);
+    } catch {
+      toast.error('카카오 공유에 실패했습니다.');
+    } finally {
+      setSharingKakao(false);
+    }
+  };
+
+  const handlePdfShare = async () => {
+    setSharingPdf(true);
+    try {
+      const file = await generateMeetingPdfFile(meeting);
+      const result = await shareFileOrDownload({
+        file,
+        title: meeting.title,
+        text: `${meeting.title} 회의자료`,
+      });
+      notifyShareResult(result, 'PDF 파일을 내려받았습니다.');
+    } catch {
+      toast.error('PDF 공유에 실패했습니다.');
+    } finally {
+      setSharingPdf(false);
+    }
+  };
+
   return (
     <AnimatePresence>
       {isMeetingDetailModalOpen && (
@@ -114,14 +172,14 @@ export function MeetingDetailModal() {
 
           {/* Modal */}
           <motion.div
-            className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl"
+            className="relative h-full w-full max-w-4xl overflow-hidden border border-gray-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
             initial={{ scale: 0.95, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          >
+            >
             {/* Header */}
-            <div className="flex items-start justify-between p-6 border-b border-gray-200 dark:border-slate-700">
+            <div className="flex items-start justify-between p-4 border-b border-gray-200 dark:border-slate-700 sm:p-6">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-2">
                   <div className="p-2 rounded-lg bg-primary/10">
@@ -188,8 +246,8 @@ export function MeetingDetailModal() {
             </div>
 
             {/* Content */}
-            <div className="overflow-y-auto max-h-[calc(90vh-200px)]">
-              <div className="p-6 space-y-6">
+            <div className="overflow-y-auto max-h-[calc(100vh-190px)] sm:max-h-[calc(90vh-200px)]">
+              <div className="p-4 space-y-6 sm:p-6">
                 {/* 작성자 & 참석자 */}
                 <div className="flex flex-wrap items-start gap-6">
                   {/* 작성자 */}
@@ -376,10 +434,28 @@ export function MeetingDetailModal() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end p-4 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50">
+            <div className="flex flex-col gap-3 p-4 border-t border-gray-200 bg-gray-50 dark:border-slate-700 dark:bg-slate-800/50 sm:flex-row sm:items-center sm:justify-between">
+              <div className="grid grid-cols-2 gap-2 sm:flex">
+                <button
+                  onClick={() => void handleKakaoShare()}
+                  disabled={sharingKakao || sharingPdf}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#FEE500] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#f2da00] disabled:opacity-60"
+                >
+                  {sharingKakao ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                  카카오 공유
+                </button>
+                <button
+                  onClick={() => void handlePdfShare()}
+                  disabled={sharingKakao || sharingPdf}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+                >
+                  {sharingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                  PDF 공유
+                </button>
+              </div>
               <button
                 onClick={handleClose}
-                className="aboard-btn-secondary"
+                className="min-h-11 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
               >
                 닫기
               </button>

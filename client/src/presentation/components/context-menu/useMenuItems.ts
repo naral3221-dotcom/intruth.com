@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Edit3,
   Trash2,
@@ -11,6 +11,7 @@ import {
   ClipboardList,
   UserMinus,
   Mail,
+  Share2,
 } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useTaskStore } from '@/stores/taskStore';
@@ -18,6 +19,9 @@ import { useProjectStore } from '@/stores/projectStore';
 import { useTeamStore } from '@/stores/teamStore';
 import { useRoutineStore } from '@/stores/routineStore';
 import { useMeetingStore } from '@/stores/meetingStore';
+import { toast } from '@/stores/toastStore';
+import { shareMeeting, shareProject, shareTask } from '@/shared/share/entityShare';
+import type { ShareResult } from '@/shared/share/kakaoShare';
 import type { ContextMenuItemProps } from './ContextMenuItem';
 
 type MenuItemConfig = Omit<ContextMenuItemProps, 'onClick'> & {
@@ -47,6 +51,26 @@ export function useMenuItems() {
   const deleteTeam = useTeamStore((state) => state.deleteTeam);
   const { toggleComplete: toggleRoutineComplete, deleteRoutine } = useRoutineStore();
   const { deleteMeeting, deleteComment: deleteMeetingComment } = useMeetingStore();
+
+  const notifyShareResult = useCallback((result: ShareResult) => {
+    if (result === 'kakao' || result === 'native') {
+      toast.success('공유 화면을 열었습니다.');
+      return;
+    }
+
+    if (result === 'copied') {
+      toast.success('공유 내용을 복사했습니다.');
+      return;
+    }
+
+    toast.info('공유를 완료했습니다.');
+  }, []);
+
+  const runShare = useCallback((sharePromise: Promise<ShareResult>) => {
+    void sharePromise.then(notifyShareResult).catch(() => {
+      toast.error('공유에 실패했습니다.');
+    });
+  }, [notifyShareResult]);
 
   const menuItems = useMemo((): MenuItemConfig[] => {
     const { type, data } = contextMenu;
@@ -89,6 +113,11 @@ export function useMenuItems() {
           action: withClose(() => openEditTaskModal(task)),
         },
         {
+          label: '카카오 공유',
+          icon: Share2,
+          action: withClose(() => runShare(shareTask(task))),
+        },
+        {
           label: '업무 삭제',
           icon: Trash2,
           variant: 'danger',
@@ -118,6 +147,11 @@ export function useMenuItems() {
           label: '진행상황 보기',
           icon: Eye,
           action: withClose(() => openProjectProgressModal(project)),
+        },
+        {
+          label: '카카오 공유',
+          icon: Share2,
+          action: withClose(() => runShare(shareProject(project))),
         },
         {
           label: '프로젝트 수정',
@@ -211,6 +245,11 @@ export function useMenuItems() {
           label: '상세보기',
           icon: Eye,
           action: withClose(() => openMeetingDetailModal(meeting)),
+        },
+        {
+          label: '카카오 공유',
+          icon: Share2,
+          action: withClose(() => runShare(shareMeeting(meeting))),
         },
         {
           label: '수정',
@@ -325,6 +364,7 @@ export function useMenuItems() {
     deleteRoutine,
     deleteMeeting,
     deleteMeetingComment,
+    runShare,
   ]);
 
   return menuItems;

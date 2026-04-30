@@ -11,6 +11,7 @@ export {
     ProjectTreeView,
     TeamProgress,
     ActivityFeed,
+    MobileDashboardHome,
 } from './components';
 
 // Types

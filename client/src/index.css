@@ -121,6 +121,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  background-color: hsl(var(--background));
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 1023px) {
+  main {
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  }
+}
+
 /* Custom Scrollbar (minimal) */
 ::-webkit-scrollbar {
   width: 8px;

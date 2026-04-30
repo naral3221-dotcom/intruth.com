@@ -25,12 +25,12 @@ export function Sidebar() {
       {/* Logo - 그라디언트와 깊이감 */}
       <div className="flex h-16 items-center gap-3 px-5 border-b border-gray-100">
         <div className="relative flex h-10 w-10 items-center justify-center rounded-xl gradient-primary text-white font-bold shadow-lg shadow-blue-500/25">
-          <span className="text-lg relative z-10">W</span>
+          <span className="text-xs relative z-10 font-black">IN</span>
           <div className="absolute inset-0 rounded-xl bg-linear-to-t from-black/10 to-transparent" />
         </div>
         <div className="flex flex-col">
-          <span className="text-lg font-bold text-gray-900">Workflow</span>
-          <span className="text-[10px] text-gray-400 font-medium -mt-0.5">Task Management</span>
+          <span className="text-lg font-bold text-gray-900">INTRUTH</span>
+          <span className="text-[10px] text-gray-400 font-medium -mt-0.5">Church Leadership</span>
         </div>
       </div>
 

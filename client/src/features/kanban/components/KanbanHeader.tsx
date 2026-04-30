@@ -44,28 +44,28 @@ export function KanbanHeader({
 
     return (
         <header className="shrink-0 mb-6">
-            <div className="flex justify-between items-center">
-                <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                     {/* 프로젝트 선택 드롭다운 */}
-                    <div className="relative" ref={dropdownRef}>
+                    <div className="relative w-full sm:w-auto" ref={dropdownRef}>
                         <motion.button
                             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                            className="flex items-center gap-3 px-4 py-3 rounded-xl
+                            className="flex w-full items-center gap-3 rounded-xl px-4 py-3
                                        bg-white border border-gray-200
                                        hover:border-gray-300 hover:shadow-sm transition-all duration-200
-                                       group min-w-[200px]"
+                                       group sm:min-w-[240px]"
                             whileHover={{ scale: 1.01 }}
                             whileTap={{ scale: 0.99 }}
                         >
-                            <div className="p-2 rounded-lg bg-gray-100 text-gray-600">
+                            <div className="shrink-0 p-2 rounded-lg bg-gray-100 text-gray-600">
                                 {showAllProjects ? (
                                     <Layers className="w-5 h-5" />
                                 ) : (
                                     <FolderOpen className="w-5 h-5" />
                                 )}
                             </div>
-                            <div className="flex-1 text-left">
-                                <span className="text-base font-semibold text-gray-900 block">
+                            <div className="min-w-0 flex-1 text-left">
+                                <span className="block truncate text-base font-semibold text-gray-900">
                                     {displayName}
                                 </span>
                                 <span className="text-xs text-gray-500">
@@ -171,7 +171,7 @@ export function KanbanHeader({
                 </div>
 
                 <button
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-full font-medium hover:opacity-90"
+                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2 font-medium text-primary-foreground hover:opacity-90 sm:w-auto"
                     onClick={onAddProject}
                 >
                     <Plus className="w-4 h-4" /> 새 프로젝트

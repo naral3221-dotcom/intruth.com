@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Check, Clock, AlertCircle, ChevronDown, Folder } from 'lucide-react';
+import { X, Check, Clock, AlertCircle, ChevronDown, Folder, MessageCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { useTaskStore } from '@/stores/taskStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useMemberStore } from '@/stores/memberStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
+import { toast } from '@/stores/toastStore';
 import { validateTaskForm, getFieldError, type ValidationResult } from '@/core/utils/validation';
+import { shareTask } from '@/shared/share/entityShare';
+import type { ShareResult } from '@/shared/share/kakaoShare';
 import type { TaskStatus, TaskPriority } from '@/types';
 
 const statusOptions: { value: TaskStatus; label: string; color: string }[] = [
@@ -50,6 +53,7 @@ export function SpatialTaskModal() {
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
+  const [sharingKakao, setSharingKakao] = useState(false);
   const [validation, setValidation] = useState<ValidationResult>({ isValid: true, errors: [] });
 
   const toggleAssignee = (memberId: string) => {
@@ -121,8 +125,37 @@ export function SpatialTaskModal() {
     }
     setError(null);
     setShowAssigneeDropdown(false);
+    setSharingKakao(false);
     setValidation({ isValid: true, errors: [] });
   }, [currentTask, taskModalProjectId, projects, isTaskModalOpen, user]);
+
+  const notifyShareResult = (result: ShareResult) => {
+    if (result === 'kakao' || result === 'native') {
+      toast.success('공유 화면을 열었습니다.');
+      return;
+    }
+
+    if (result === 'copied') {
+      toast.success('공유 내용을 복사했습니다.');
+      return;
+    }
+
+    toast.info('공유를 완료했습니다.');
+  };
+
+  const handleKakaoShare = async () => {
+    if (!currentTask) return;
+
+    setSharingKakao(true);
+    try {
+      const result = await shareTask(currentTask);
+      notifyShareResult(result);
+    } catch {
+      toast.error('업무 공유에 실패했습니다.');
+    } finally {
+      setSharingKakao(false);
+    }
+  };
 
   const validateField = (fieldName: string) => {
     const result = validateTaskForm(formData, !!taskModalParentId);
@@ -215,18 +248,18 @@ export function SpatialTaskModal() {
             onClick={closeTaskModal}
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={cn(
-              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full mx-4",
-              taskModalParentId ? "max-w-md" : "max-w-lg"
+              "fixed inset-x-0 bottom-0 z-50 w-full sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:mx-4 sm:-translate-x-1/2 sm:-translate-y-1/2",
+              taskModalParentId ? "sm:max-w-md" : "sm:max-w-lg"
             )}
           >
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+            <div className="flex h-[100dvh] flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-700">
+              <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-slate-700">
                 <h2 className="text-lg font-semibold text-foreground">
                   {currentTask ? '업무 수정' : taskModalParentId ? '하위 업무 추가' : '새 업무'}
                 </h2>
@@ -239,8 +272,8 @@ export function SpatialTaskModal() {
               </div>
 
               {/* Form */}
-              <form onSubmit={handleSubmit}>
-                <div className="p-5 space-y-4 max-h-[65vh] overflow-y-auto">
+              <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
                   {/* Error */}
                   {error && (
                     <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-center gap-2">
@@ -297,45 +330,47 @@ export function SpatialTaskModal() {
                   )}
 
                   {/* Status & Priority - 2 columns */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">상태</label>
-                      <div className="relative">
-                        <span className={cn(
-                          "absolute left-4 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full",
-                          statusOptions.find(s => s.value === formData.status)?.color
-                        )} />
-                        <select
-                          value={formData.status}
-                          onChange={(e) => setFormData({ ...formData, status: e.target.value as TaskStatus })}
-                          className="aboard-input pl-10"
-                        >
-                          {statusOptions.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="grid grid-cols-2 gap-2">
+                        {statusOptions.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, status: opt.value })}
+                            className={cn(
+                              "flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors",
+                              formData.status === opt.value
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                          >
+                            <span className={cn("h-2.5 w-2.5 rounded-full", opt.color)} />
+                            <span className="whitespace-nowrap">{opt.label}</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">우선순위</label>
-                      <div className="relative">
-                        <span className={cn(
-                          "absolute left-4 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full",
-                          priorityOptions.find(p => p.value === formData.priority)?.color
-                        )} />
-                        <select
-                          value={formData.priority}
-                          onChange={(e) => setFormData({ ...formData, priority: e.target.value as TaskPriority })}
-                          className="aboard-input pl-10"
-                        >
-                          {priorityOptions.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
+                      <div className="grid grid-cols-2 gap-2">
+                        {priorityOptions.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, priority: opt.value })}
+                            className={cn(
+                              "flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors",
+                              formData.priority === opt.value
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+                            )}
+                          >
+                            <span className={cn("h-2.5 w-2.5 rounded-full", opt.color)} />
+                            <span className="whitespace-nowrap">{opt.label}</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -396,7 +431,7 @@ export function SpatialTaskModal() {
                           exit={{ opacity: 0, y: -5 }}
                           className="mt-2 p-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg max-h-40 overflow-y-auto"
                         >
-                          <div className="grid grid-cols-2 gap-1">
+                          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                             {members.map((member) => {
                               const isSelected = formData.assigneeIds.includes(member.id);
                               return (
@@ -496,7 +531,7 @@ export function SpatialTaskModal() {
                                   다음주
                                 </button>
                               </div>
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <div>
                                   <label className="block text-xs text-muted-foreground mb-1">시작일</label>
                                   <input
@@ -540,24 +575,37 @@ export function SpatialTaskModal() {
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50">
-                  <button
-                    type="button"
-                    onClick={closeTaskModal}
-                    className="aboard-btn-secondary"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className={cn(
-                      "aboard-btn-primary",
-                      loading && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    {loading ? '저장 중...' : currentTask ? '수정' : '추가'}
-                  </button>
+                <div className="shrink-0 border-t border-gray-200 bg-gray-50 px-5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 dark:border-slate-700 dark:bg-slate-800/50 sm:flex sm:items-center sm:justify-between sm:gap-2 sm:pb-3">
+                  {currentTask && (
+                    <button
+                      type="button"
+                      onClick={() => void handleKakaoShare()}
+                      disabled={loading || sharingKakao}
+                      className="mb-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#FEE500] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#f2da00] disabled:opacity-60 sm:mb-0 sm:w-auto"
+                    >
+                      {sharingKakao ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                      카카오 공유
+                    </button>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 sm:ml-auto sm:flex sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={closeTaskModal}
+                      className="aboard-btn-secondary min-h-11 justify-center"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading || sharingKakao}
+                      className={cn(
+                        "aboard-btn-primary min-h-11 justify-center",
+                        (loading || sharingKakao) && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      {loading ? '저장 중...' : currentTask ? '수정' : '추가'}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

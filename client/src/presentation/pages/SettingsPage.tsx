@@ -13,12 +13,22 @@ import {
   Camera,
   Bell,
   Globe,
+  MessageCircle,
+  ExternalLink,
+  CheckCircle2,
+  AlertTriangle,
+  Copy,
+  FileDown,
 } from "lucide-react";
 import { useSettings } from "@/features/settings/hooks/useSettings";
 import { SettingsToggle } from "@/features/settings/components/SettingsToggle";
 import { cn } from "@/core/utils/cn";
+import { toast } from "@/stores/toastStore";
+import { copyShareText, shareKakaoText, type ShareResult } from "@/shared/share/kakaoShare";
+import { canNativeFileShare } from "@/shared/share/nativeFileShare";
+import { createShareUrl, getShareRuntimeStatus } from "@/shared/share/shareConfig";
 
-type TabId = "profile" | "appearance" | "security" | "notifications";
+type TabId = "profile" | "appearance" | "notifications" | "integrations" | "security";
 
 interface Tab {
   id: TabId;
@@ -31,8 +41,15 @@ const tabs: Tab[] = [
   { id: "profile", label: "프로필", icon: User, iconBg: "widget-icon-blue" },
   { id: "appearance", label: "외관", icon: Palette, iconBg: "widget-icon-purple" },
   { id: "notifications", label: "알림", icon: Bell, iconBg: "widget-icon-orange" },
+  { id: "integrations", label: "연동", icon: MessageCircle, iconBg: "widget-icon-blue" },
   { id: "security", label: "보안", icon: Shield, iconBg: "widget-icon-green" },
 ];
+
+function maskKey(value: string) {
+  if (!value) return "";
+  if (value.length <= 8) return "설정됨";
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>("profile");
@@ -50,6 +67,72 @@ export function SettingsPage() {
 
   const [profileName, setProfileName] = useState(profile?.name || "");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const shareStatus = getShareRuntimeStatus();
+  const kakaoJavascriptKey = shareStatus.kakaoJavascriptKey;
+  const currentOrigin = shareStatus.currentOrigin;
+  const publicAppUrl = shareStatus.publicAppUrl;
+  const kakaoReady = Boolean(kakaoJavascriptKey);
+  const publicUrlReady = shareStatus.configuredPublicUrl && !shareStatus.publicUrlIsLocal;
+  const nativeFileShareReady = canNativeFileShare();
+  const envSnippet = [
+    `VITE_PUBLIC_APP_URL=${publicAppUrl || "https://intruth.example.com"}`,
+    "VITE_KAKAO_JAVASCRIPT_KEY=카카오_JavaScript_키",
+  ].join("\n");
+
+  const notifyShareResult = (result: ShareResult) => {
+    if (result === "kakao" || result === "native") {
+      toast.success("공유 화면을 열었습니다.");
+      return;
+    }
+
+    if (result === "copied") {
+      toast.success("공유 내용을 복사했습니다.");
+      return;
+    }
+
+    toast.info("공유를 완료했습니다.");
+  };
+
+  const handleCopyOrigin = async () => {
+    try {
+      await copyShareText(currentOrigin);
+      toast.success("도메인을 복사했습니다.");
+    } catch {
+      toast.error("도메인 복사에 실패했습니다.");
+    }
+  };
+
+  const handleCopyPublicUrl = async () => {
+    try {
+      await copyShareText(publicAppUrl);
+      toast.success("공유 기준 URL을 복사했습니다.");
+    } catch {
+      toast.error("URL 복사에 실패했습니다.");
+    }
+  };
+
+  const handleCopyEnvSnippet = async () => {
+    try {
+      await copyShareText(envSnippet);
+      toast.success("환경 변수 예시를 복사했습니다.");
+    } catch {
+      toast.error("환경 변수 복사에 실패했습니다.");
+    }
+  };
+
+  const handleKakaoTestShare = async () => {
+    try {
+      const result = await shareKakaoText({
+        title: "INTRUTH",
+        text: "INTRUTH 카카오 공유 테스트입니다.",
+        url: createShareUrl("/"),
+        buttonTitle: "INTRUTH 열기",
+      });
+      notifyShareResult(result);
+    } catch {
+      toast.error("공유 테스트에 실패했습니다.");
+    }
+  };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -88,7 +171,7 @@ export function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "wolk-flow-settings.json";
+    a.download = "intruth-settings.json";
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -423,6 +506,162 @@ export function SettingsPage() {
                       onChange={() => {}}
                     />
                   </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Integrations Tab */}
+          {activeTab === "integrations" && (
+            <motion.div
+              className="space-y-6"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="aboard-card p-6">
+                <div className="mb-6 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FEE500] text-[#191919]">
+                    <MessageCircle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground">카카오톡 공유</h3>
+                    <p className="text-xs text-muted-foreground">업무, 프로젝트, 회의자료 공유 상태</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "flex h-9 w-9 items-center justify-center rounded-lg",
+                        kakaoReady ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
+                      )}>
+                        {kakaoReady ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">JavaScript 키</p>
+                        <p className="text-xs text-muted-foreground">
+                          {kakaoReady ? maskKey(kakaoJavascriptKey) : "VITE_KAKAO_JAVASCRIPT_KEY 필요"}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={cn(
+                      "aboard-badge text-[10px]",
+                      kakaoReady ? "aboard-badge-success" : "aboard-badge-warning"
+                    )}>
+                      {kakaoReady ? "설정됨" : "대기"}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                        publicUrlReady ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
+                      )}>
+                        {publicUrlReady ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground">공유 기준 URL</p>
+                        <p className="truncate text-sm text-muted-foreground">{publicAppUrl || "VITE_PUBLIC_APP_URL 필요"}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          카카오 Developers의 JavaScript SDK 도메인에 등록할 주소입니다.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => void handleCopyPublicUrl()}
+                      className="aboard-btn-secondary inline-flex min-h-10 items-center justify-center gap-2 text-sm"
+                    >
+                      <Copy className="h-4 w-4" />
+                      복사
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground">현재 접속 도메인</p>
+                      <p className="truncate text-sm text-muted-foreground">{currentOrigin}</p>
+                      {shareStatus.currentOriginIsLocal && (
+                        <p className="mt-1 text-xs text-amber-600">
+                          로컬 주소에서는 카카오 SDK 도메인 검증이 제한될 수 있습니다.
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => void handleCopyOrigin()}
+                      className="aboard-btn-secondary inline-flex min-h-10 items-center justify-center gap-2 text-sm"
+                    >
+                      <Copy className="h-4 w-4" />
+                      복사
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "flex h-9 w-9 items-center justify-center rounded-lg",
+                        nativeFileShareReady ? "bg-emerald-500/10 text-emerald-600" : "bg-slate-500/10 text-slate-600"
+                      )}>
+                        {nativeFileShareReady ? <CheckCircle2 className="h-5 w-5" /> : <FileDown className="h-5 w-5" />}
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">PDF 파일 공유</p>
+                        <p className="text-xs text-muted-foreground">
+                          {nativeFileShareReady
+                            ? "이 브라우저는 PDF를 카카오톡 앱으로 보낼 수 있습니다."
+                            : "미지원 브라우저에서는 PDF를 내려받은 뒤 공유합니다."}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={cn(
+                      "aboard-badge text-[10px]",
+                      nativeFileShareReady ? "aboard-badge-success" : "aboard-badge-info"
+                    )}>
+                      {nativeFileShareReady ? "파일 공유 가능" : "다운로드 대체"}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border border-dashed border-border bg-card p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="font-medium text-foreground">운영 배포 환경 변수</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          VPS 도메인이 정해지면 아래 값을 production 환경에 넣고 같은 도메인을 카카오 앱에 등록하세요.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => void handleCopyEnvSnippet()}
+                        className="aboard-btn-secondary inline-flex min-h-10 items-center justify-center gap-2 text-sm"
+                      >
+                        <Copy className="h-4 w-4" />
+                        복사
+                      </button>
+                    </div>
+                    <pre className="mt-3 overflow-x-auto rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                      {envSnippet}
+                    </pre>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    onClick={() => void handleKakaoTestShare()}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#FEE500] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#f2da00]"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    공유 테스트
+                  </button>
+                  <a
+                    href="https://developers.kakao.com/console/app"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="aboard-btn-secondary inline-flex min-h-11 items-center justify-center gap-2 text-sm"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Kakao Developers
+                  </a>
                 </div>
               </div>
             </motion.div>

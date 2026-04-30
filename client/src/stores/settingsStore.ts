@@ -153,7 +153,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
     }),
     {
-      name: 'workflow-settings',
+      name: 'intruth-settings',
       partialize: (state) => ({
         appearance: state.appearance,
         security: state.security,

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
     DndContext,
@@ -39,8 +40,10 @@ export function KanbanBoard() {
         showAllProjects,
         setSelectedProjectId,
         setShowAllProjects,
+        openEditTaskModal,
         openCreateProjectModal
     } = useUIStore();
+    const [searchParams, setSearchParams] = useSearchParams();
 
     // 활성 프로젝트만 필터링
     const activeProjects = useMemo(() => {
@@ -54,6 +57,19 @@ export function KanbanBoard() {
             setShowAllProjects(true);
         }
     }, [activeProjects, selectedProjectId, showAllProjects, setShowAllProjects]);
+
+    useEffect(() => {
+        const taskId = searchParams.get('taskId');
+        if (!taskId || storeTasks.length === 0) return;
+
+        const linkedTask = storeTasks.find((task) => task.id === taskId);
+        if (!linkedTask) return;
+
+        openEditTaskModal(linkedTask);
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('taskId');
+        setSearchParams(nextParams, { replace: true });
+    }, [openEditTaskModal, searchParams, setSearchParams, storeTasks]);
 
     // 선택된 프로젝트에 따라 태스크 필터링
     const filteredStoreTasks = useMemo(() => {
@@ -77,13 +93,7 @@ export function KanbanBoard() {
     // 드래그 중 로컬 상태
     const [localTasks, setLocalTasks] = useState<SpatialTask[]>([]);
     const [isDragging, setIsDragging] = useState(false);
-
-    // Store tasks가 변경될 때 localTasks 동기화 (드래그 중이 아닐 때만)
-    useEffect(() => {
-        if (!isDragging) {
-            setLocalTasks(tasks);
-        }
-    }, [tasks, isDragging]);
+    const displayedTasks = isDragging ? localTasks : tasks;
 
     const [activeColumn, setActiveColumn] = useState<typeof columns[0] | null>(null);
     const [activeTask, setActiveTask] = useState<SpatialTask | null>(null);
@@ -106,11 +116,12 @@ export function KanbanBoard() {
             'REVIEW': 'review',
             'DONE': 'done'
         };
-        return localTasks.filter((t: SpatialTask) => t.status === statusMap[status]);
+        return displayedTasks.filter((t: SpatialTask) => t.status === statusMap[status]);
     };
 
     // 드래그 핸들러
     const onDragStart = (event: DragStartEvent) => {
+        setLocalTasks(tasks);
         setIsDragging(true);
         if (event.active.data.current?.type === "Column") {
             setActiveColumn(event.active.data.current.column);
@@ -227,7 +238,7 @@ export function KanbanBoard() {
 
     return (
         <motion.div
-            className="h-full flex flex-col p-8 overflow-hidden"
+            className="flex h-full flex-col overflow-hidden p-4 md:p-6 lg:p-8"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
@@ -239,7 +250,7 @@ export function KanbanBoard() {
                 onProjectSelect={setSelectedProjectId}
                 onShowAllToggle={setShowAllProjects}
                 onAddProject={handleAddProject}
-                taskCount={localTasks.length}
+                taskCount={displayedTasks.length}
             />
 
             {/* 루틴 현황 바 */}
@@ -253,7 +264,7 @@ export function KanbanBoard() {
                 onDragOver={onDragOver}
             >
                 <motion.div
-                    className="flex gap-6 overflow-x-auto pb-4 h-full items-start"
+                    className="flex h-full items-start gap-4 overflow-x-auto pb-4 lg:gap-5 xl:gap-6"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2, duration: 0.5 }}

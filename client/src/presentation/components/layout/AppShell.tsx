@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { Outlet } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
+import { MobileBottomNavigation } from "./MobileBottomNavigation";
 import { QuickAddButton } from "../ui/QuickAddButton";
+import { PwaInstallPrompt } from "../pwa/PwaInstallPrompt";
 import { useEmptyContextMenu } from "../context-menu";
 
 interface AppShellProps {
@@ -25,6 +27,9 @@ export function AppShell({ children }: AppShellProps) {
                     {children || <Outlet />}
                 </div>
             </main>
+
+            <PwaInstallPrompt />
+            <MobileBottomNavigation />
 
             {/* Quick Add FAB Button */}
             <QuickAddButton />

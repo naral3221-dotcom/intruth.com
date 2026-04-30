@@ -5,3 +5,4 @@ export { TaskPreview } from './TaskPreview';
 export { ProjectTreeView } from './ProjectTreeView';
 export { TeamProgress } from './TeamProgress';
 export { ActivityFeed } from './ActivityFeed';
+export { MobileDashboardHome } from './MobileDashboardHome';

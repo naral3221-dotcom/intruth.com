@@ -64,7 +64,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
         <AnimatePresence>
             {isOpen && (
                 <motion.div
-                    className="fixed inset-0 z-[100] lg:hidden"
+                    className="fixed inset-0 z-[100] bg-white text-slate-950 dark:bg-slate-950 dark:text-slate-50 lg:hidden"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -72,25 +72,25 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                 >
                     {/* Backdrop */}
                     <motion.div
-                        className="absolute inset-0 bg-background"
+                        className="absolute inset-0 bg-white dark:bg-slate-950"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                     />
 
                     {/* Content */}
-                    <div className="relative h-full flex flex-col">
+                    <div className="relative z-10 flex h-full flex-col bg-white dark:bg-slate-950">
                         {/* Header */}
-                        <div className="flex items-center justify-between h-14 px-4 border-b border-border">
+                        <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-800">
                             <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center">
-                                    <span className="text-background font-bold text-sm">W</span>
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950">
+                                    <span className="text-sm font-black tracking-normal">IN</span>
                                 </div>
-                                <span className="font-semibold text-lg">WorkFlow</span>
+                                <span className="text-xl font-black tracking-normal">INTRUTH</span>
                             </div>
                             <button
                                 onClick={onClose}
-                                className="p-2 -mr-2 rounded-lg hover:bg-foreground/5 transition-colors"
+                                className="-mr-2 rounded-lg p-2 transition-colors hover:bg-slate-100 dark:hover:bg-slate-900"
                                 aria-label="메뉴 닫기"
                             >
                                 <X className="w-6 h-6" />
@@ -98,7 +98,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                         </div>
 
                         {/* Navigation Links */}
-                        <nav className="flex-1 overflow-y-auto px-4 py-6">
+                        <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
                             <div className="space-y-1">
                                 {NAV_ITEMS.map((item, index) => (
                                     <motion.div
@@ -111,14 +111,14 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                                             to={item.path}
                                             onClick={onClose}
                                             className={({ isActive }) => cn(
-                                                "flex items-center gap-4 px-4 py-4 rounded-xl transition-colors",
+                                                "flex min-h-14 items-center gap-4 rounded-xl px-4 py-3 transition-colors",
                                                 isActive
-                                                    ? "bg-foreground/5 text-foreground"
-                                                    : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
+                                                    ? "bg-slate-100 text-slate-950 dark:bg-slate-900 dark:text-slate-50"
+                                                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-50"
                                             )}
                                         >
                                             <item.icon className="w-5 h-5" />
-                                            <span className="text-lg font-medium">{item.label}</span>
+                                            <span className="text-base font-semibold">{item.label}</span>
                                         </NavLink>
                                     </motion.div>
                                 ))}
@@ -154,7 +154,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
 
                         {/* User Section */}
                         <motion.div
-                            className="border-t border-border p-4 bg-secondary/50"
+                            className="shrink-0 border-t border-slate-200 bg-slate-50 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-900"
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.15, duration: 0.2 }}

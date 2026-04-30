@@ -45,7 +45,7 @@ export function KanbanColumn({ column, tasks }: KanbanColumnProps) {
             <motion.div
                 ref={setNodeRef}
                 style={style}
-                className={`w-[320px] h-[500px] rounded-xl bg-gray-100 border-2 border-dashed ${colors.border} shrink-0`}
+                className={`h-[500px] w-[min(20rem,calc(100vw-2rem))] shrink-0 rounded-xl border-2 border-dashed bg-gray-100 lg:w-72 xl:w-[19rem] 2xl:w-80 ${colors.border}`}
                 animate={{ scale: 1.02 }}
             >
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -59,7 +59,7 @@ export function KanbanColumn({ column, tasks }: KanbanColumnProps) {
         <motion.div
             ref={setNodeRef}
             style={style}
-            className="w-[320px] shrink-0 flex flex-col gap-3"
+            className="flex w-[min(20rem,calc(100vw-2rem))] shrink-0 flex-col gap-3 lg:w-72 xl:w-[19rem] 2xl:w-80"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 100, damping: 15 }}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
     CheckCircle2,
@@ -14,11 +14,13 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useMeetingStore } from "@/stores/meetingStore";
 import {
     useDashboard,
     ProjectTreeView,
     TeamProgress,
     ActivityFeed,
+    MobileDashboardHome,
 } from "@/features/dashboard";
 
 // Quick Action Button Component
@@ -159,9 +161,22 @@ function TaskWidgetContent({ tasks }: { tasks: { todo: number; inProgress: numbe
 
 export function Dashboard() {
     const { user: member } = useAuthStore();
-    const { openCreateProjectModal, openEditTaskModal } = useUIStore();
+    const {
+        openCreateProjectModal,
+        openEditTaskModal,
+        openCreateTaskModal,
+        openCreateMeetingModal,
+    } = useUIStore();
     const { data, loading } = useDashboard();
     const { stats, projectStats, projects, allTasks, memberProgress, activities } = data;
+    const meetings = useMeetingStore((state) => state.meetings);
+    const fetchMeetings = useMeetingStore((state) => state.fetchMeetings);
+
+    useEffect(() => {
+        if (meetings.length === 0) {
+            void fetchMeetings();
+        }
+    }, [fetchMeetings, meetings.length]);
 
     if (loading) {
         return (
@@ -181,6 +196,21 @@ export function Dashboard() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4 }}
         >
+            <div className="lg:hidden">
+                <MobileDashboardHome
+                    memberName={member?.name}
+                    stats={stats}
+                    projectStats={projectStats}
+                    myTasks={data.myTasks}
+                    meetings={meetings}
+                    activities={activities}
+                    onCreateTask={() => openCreateTaskModal()}
+                    onCreateMeeting={openCreateMeetingModal}
+                    onCreateProject={openCreateProjectModal}
+                />
+            </div>
+
+            <div className="hidden space-y-8 lg:block">
             {/* Header Section */}
             <header className="space-y-4">
                 <motion.div
@@ -396,6 +426,7 @@ export function Dashboard() {
             >
                 <TeamProgress members={memberProgress} onTaskClick={openEditTaskModal} />
             </motion.div>
+            </div>
         </motion.div>
     );
 }

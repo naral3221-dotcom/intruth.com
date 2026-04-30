@@ -1,11 +1,14 @@
 import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, FolderKanban, Calendar, Users, ChevronDown, ChevronUp, UserPlus, Check } from 'lucide-react';
+import { X, FolderKanban, Calendar, Users, ChevronDown, ChevronUp, UserPlus, Check, MessageCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { useProjectStore } from '@/stores/projectStore';
 import type { TeamAssignmentInput } from '@/stores/projectStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useTeamStore } from '@/stores/teamStore';
+import { toast } from '@/stores/toastStore';
+import { shareProject } from '@/shared/share/entityShare';
+import type { ShareResult } from '@/shared/share/kakaoShare';
 import type { Team, Member } from '@/types';
 
 interface TeamAssignmentState {
@@ -33,6 +36,7 @@ export function SpatialProjectModal() {
   const [teamAssignments, setTeamAssignments] = useState<TeamAssignmentState[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sharingKakao, setSharingKakao] = useState(false);
 
   // 팀 목록 로드
   useEffect(() => {
@@ -102,7 +106,36 @@ export function SpatialProjectModal() {
       setTeamAssignments([]);
     }
     setError(null);
+    setSharingKakao(false);
   }, [currentProject, isProjectModalOpen]);
+
+  const notifyShareResult = (result: ShareResult) => {
+    if (result === 'kakao' || result === 'native') {
+      toast.success('공유 화면을 열었습니다.');
+      return;
+    }
+
+    if (result === 'copied') {
+      toast.success('공유 내용을 복사했습니다.');
+      return;
+    }
+
+    toast.info('공유를 완료했습니다.');
+  };
+
+  const handleKakaoShare = async () => {
+    if (!currentProject) return;
+
+    setSharingKakao(true);
+    try {
+      const result = await shareProject(currentProject);
+      notifyShareResult(result);
+    } catch {
+      toast.error('프로젝트 공유에 실패했습니다.');
+    } finally {
+      setSharingKakao(false);
+    }
+  };
 
   // 선택된 팀 ID 목록
   const selectedTeamIds = useMemo(
@@ -244,15 +277,15 @@ export function SpatialProjectModal() {
             onClick={closeProjectModal}
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg max-h-[90vh] overflow-hidden"
+            className="fixed inset-x-0 bottom-0 z-50 w-full overflow-hidden sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2"
           >
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex h-[100dvh] flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-slate-700 shrink-0">
+              <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-slate-700">
                 <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                   <FolderKanban className="w-5 h-5 text-primary" />
                   {currentProject ? '프로젝트 수정' : '새 프로젝트'}
@@ -267,7 +300,7 @@ export function SpatialProjectModal() {
 
               {/* Form */}
               <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-                <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
                   {error && (
                     <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
                       {error}
@@ -402,7 +435,7 @@ export function SpatialProjectModal() {
 
                                         {/* 멤버 목록 */}
                                         {members.length > 0 ? (
-                                          <div className="grid grid-cols-2 gap-2">
+                                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                             {members.map((member) => {
                                               const isSelected = assignment.assigneeIds.includes(member.id);
                                               return (
@@ -468,7 +501,7 @@ export function SpatialProjectModal() {
                   </div>
 
                   {/* Dates */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="text-sm font-medium text-foreground mb-1.5 flex items-center gap-1">
                         <Calendar className="w-4 h-4" />
@@ -497,24 +530,37 @@ export function SpatialProjectModal() {
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50 shrink-0">
-                  <button
-                    type="button"
-                    onClick={closeProjectModal}
-                    className="aboard-btn-secondary"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className={cn(
-                      "aboard-btn-primary",
-                      loading && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    {loading ? '저장 중...' : currentProject ? '수정' : '생성'}
-                  </button>
+                <div className="shrink-0 border-t border-gray-200 bg-gray-50 px-5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 dark:border-slate-700 dark:bg-slate-800/50 sm:flex sm:items-center sm:justify-between sm:gap-2 sm:pb-3">
+                  {currentProject && (
+                    <button
+                      type="button"
+                      onClick={() => void handleKakaoShare()}
+                      disabled={loading || sharingKakao}
+                      className="mb-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#FEE500] px-4 py-2 text-sm font-semibold text-[#191919] transition-colors hover:bg-[#f2da00] disabled:opacity-60 sm:mb-0 sm:w-auto"
+                    >
+                      {sharingKakao ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                      카카오 공유
+                    </button>
+                  )}
+                  <div className="grid grid-cols-2 gap-2 sm:ml-auto sm:flex sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={closeProjectModal}
+                      className="aboard-btn-secondary min-h-11 justify-center"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading || sharingKakao}
+                      className={cn(
+                        "aboard-btn-primary min-h-11 justify-center",
+                        (loading || sharingKakao) && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      {loading ? '저장 중...' : currentProject ? '수정' : '생성'}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

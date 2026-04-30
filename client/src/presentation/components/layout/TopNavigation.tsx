@@ -21,7 +21,7 @@ import { cn } from "@/core/utils/cn";
 import { MobileMenu } from "./MobileMenu";
 
 const NAV_ITEMS = [
-    { label: "Home", path: "/", icon: Home },
+    { label: "홈", path: "/", icon: Home },
     { label: "내 할일", path: "/my-tasks", icon: User },
     { label: "칸반", path: "/tasks", icon: Briefcase },
     { label: "프로젝트", path: "/projects", icon: Briefcase },
@@ -71,12 +71,10 @@ export function TopNavigation() {
                 <nav className="max-w-[1400px] mx-auto h-full px-4 lg:px-6 flex items-center justify-between">
                     {/* Logo */}
                     <NavLink to="/" className="flex items-center gap-2.5 shrink-0">
-                        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-                            <svg viewBox="0 0 24 24" className="w-5 h-5 text-white" fill="currentColor">
-                                <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm2 4v-2H3c0 1.1.9 2 2 2zM3 9h2V7H3v2zm12 12h2v-2h-2v2zm4-18H9c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12H9V5h10v10zm-8 6h2v-2h-2v2zm-4 0h2v-2H7v2z"/>
-                            </svg>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground text-background shadow-sm">
+                            <span className="text-sm font-black tracking-normal">IN</span>
                         </div>
-                        <span className="font-semibold text-lg hidden sm:block text-foreground">WorkFlow</span>
+                        <span className="text-xl font-black tracking-normal text-foreground">INTRUTH</span>
                     </NavLink>
 
                     {/* Desktop Navigation */}

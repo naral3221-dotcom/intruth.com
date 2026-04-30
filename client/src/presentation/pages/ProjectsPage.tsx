@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Plus,
@@ -26,12 +27,23 @@ import type { Project } from "@/types";
 
 type ViewMode = 'grid' | 'list' | 'timeline';
 
+type ProjectWithTaskStats = Project & {
+    completedTasksCount?: number;
+    _count?: { tasks?: number };
+};
+
+function getProjectTaskProgress(project: Project) {
+    const projectStats = project as ProjectWithTaskStats;
+    const taskCount = projectStats._count?.tasks ?? 0;
+    const completedCount = projectStats.completedTasksCount ?? 0;
+    const progress = taskCount > 0 ? Math.round((completedCount / taskCount) * 100) : 0;
+
+    return { taskCount, completedCount, progress };
+}
+
 // Project Card Component for Grid View
 function ProjectCard({ project, onClick }: { project: Project; onClick: () => void }) {
-    // Use _count from the project or default to 0
-    const taskCount = (project as any)._count?.tasks || 0;
-    const completedCount = (project as any).completedTasksCount || 0;
-    const progress = taskCount > 0 ? Math.round((completedCount / taskCount) * 100) : 0;
+    const { taskCount, completedCount, progress } = getProjectTaskProgress(project);
 
     // 우클릭 / Long Press 지원
     const { contextMenuProps, isLongPressing, ripplePosition } = useContextMenuWithLongPress({
@@ -126,10 +138,7 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
 
 // Project Row Component for List View
 function ProjectRow({ project, onClick }: { project: Project; onClick: () => void }) {
-    // Use _count from the project or default to 0
-    const taskCount = (project as any)._count?.tasks || 0;
-    const completedCount = (project as any).completedTasksCount || 0;
-    const progress = taskCount > 0 ? Math.round((completedCount / taskCount) * 100) : 0;
+    const { taskCount, completedCount, progress } = getProjectTaskProgress(project);
 
     // 우클릭 / Long Press 지원 (테이블 행에서는 Ripple 효과 미사용)
     const { contextMenuProps } = useContextMenuWithLongPress({
@@ -220,9 +229,23 @@ function ProjectRow({ project, onClick }: { project: Project; onClick: () => voi
 export function ProjectsPage() {
     const { openCreateProjectModal, openProjectProgressModal } = useUIStore();
     const { projects, loading, stats } = useProjects();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [viewMode, setViewMode] = useState<ViewMode>('grid');
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
+
+    useEffect(() => {
+        const projectId = searchParams.get('projectId');
+        if (!projectId || loading || projects.length === 0) return;
+
+        const linkedProject = projects.find((project) => project.id === projectId);
+        if (!linkedProject) return;
+
+        openProjectProgressModal(linkedProject);
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('projectId');
+        setSearchParams(nextParams, { replace: true });
+    }, [loading, openProjectProgressModal, projects, searchParams, setSearchParams]);
 
     // Filter projects
     const filteredProjects = projects.filter(project => {

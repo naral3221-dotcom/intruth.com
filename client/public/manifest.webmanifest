@@ -1,0 +1,41 @@
+{
+  "name": "INTRUTH Workflow",
+  "short_name": "INTRUTH",
+  "description": "교회 리더십 일정, 회의, 업무 공유 도구",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f5f5",
+  "theme_color": "#00bcd4",
+  "categories": ["productivity", "utilities"],
+  "lang": "ko-KR",
+  "icons": [
+    {
+      "src": "/icons/intruth-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "내 할일",
+      "short_name": "할일",
+      "url": "/my-tasks",
+      "icons": [{ "src": "/icons/intruth-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "회의자료",
+      "short_name": "회의",
+      "url": "/meetings",
+      "icons": [{ "src": "/icons/intruth-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "셀 출석",
+      "short_name": "출석",
+      "url": "/attendance",
+      "icons": [{ "src": "/icons/intruth-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}
