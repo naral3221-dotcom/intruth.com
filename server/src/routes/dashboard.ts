@@ -77,6 +77,24 @@ router.get('/team-progress', authenticate, async (req: AuthRequest, res: Respons
   }
 });
 
+// 멤버별 진행 현황
+router.get('/member-progress/:memberId', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const dashboardService = getDashboardService();
+    const progress = await dashboardService.getMemberProgress(req.params.memberId);
+
+    if (!progress) {
+      res.status(404).json({ error: '멤버 진행 현황을 찾을 수 없습니다.' });
+      return;
+    }
+
+    res.json(progress);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
 // 프로젝트별 진행 현황
 router.get('/projects-progress', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {

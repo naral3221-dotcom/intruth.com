@@ -26,6 +26,8 @@ import aiRoutes from './routes/ai.js';
 import onedriveRoutes from './routes/onedrive.js';
 import cellRoutes from './routes/cells.js';
 import attendanceRoutes from './routes/attendance.js';
+import teamRoutes from './routes/teams.js';
+import routineTaskRoutes from './routes/routineTasks.js';
 
 const app = express();
 
@@ -47,6 +49,8 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/onedrive', onedriveRoutes);
 app.use('/api/cells', cellRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/teams', teamRoutes);
+app.use('/api/routine-tasks', routineTaskRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

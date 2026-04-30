@@ -1,4 +1,4 @@
-# Workflow Management System
+# INTRUTH Workflow Management System
 
 팀원들의 업무 진행 현황을 관리하는 워크플로우 시스템입니다.
 
@@ -23,7 +23,7 @@
 ### 백엔드
 - Node.js + Express + TypeScript
 - Prisma ORM
-- MySQL
+- PostgreSQL
 - JWT 인증
 
 ## 설치 및 실행
@@ -40,16 +40,27 @@ cd ../server
 npm install
 ```
 
-### 2. 데이터베이스 설정
+### 2. 로컬 개발 데이터베이스 설정
 
-1. MySQL에 `workflow_db` 데이터베이스 생성
-2. `server/.env` 파일의 DATABASE_URL 수정
+로컬 개발에서는 설치형 PostgreSQL이나 Docker 없이도 루트 스크립트로 임베디드 PostgreSQL을 실행할 수 있습니다.
 
 ```bash
-# DB 스키마 적용
-cd server
-npx prisma db push
+# 터미널 1: 개발용 PostgreSQL 실행
+npm run dev:db
+```
 
+`server/.env`의 `DATABASE_URL`은 다음 형식으로 맞춥니다.
+
+```env
+DATABASE_URL="postgresql://postgres:password@127.0.0.1:5433/intruth_dev?schema=public"
+PORT=3002
+```
+
+DB가 켜진 상태에서 스키마와 샘플 데이터를 적용합니다.
+
+```bash
+# 터미널 2
+npm run db:migrate
 # 샘플 데이터 추가
 npm run db:seed
 ```
@@ -57,17 +68,19 @@ npm run db:seed
 ### 3. 실행
 
 ```bash
-# 백엔드 (터미널 1)
-cd server
-npm run dev
+# 실제 서버 API + 프론트 서버 모드 실행
+npm run dev:full
+```
 
-# 프론트엔드 (터미널 2)
+Mock 모드 UI만 확인할 때는 기존처럼 클라이언트만 실행할 수 있습니다.
+
+```bash
 cd client
 npm run dev
 ```
 
 - 프론트엔드: http://localhost:5173
-- 백엔드 API: http://localhost:3001
+- 백엔드 API: http://localhost:3002
 
 ## 테스트 계정
 

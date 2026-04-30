@@ -25,6 +25,7 @@ npm-debug.log*
 # Cache
 .cache/
 .parcel-cache/
+.local-postgres/
 
 # Temp
 nul

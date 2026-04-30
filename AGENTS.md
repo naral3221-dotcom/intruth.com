@@ -158,6 +158,12 @@
     └── ui-audit.spec.ts           # 주요 페이지 렌더링, 모바일 메뉴, 빠른 추가 모달 검증
 ```
 
+### 로컬 개발 스크립트 (scripts/)
+
+```
+└── dev-postgres.mjs               # 설치형 PostgreSQL 없이 개발용 DB 실행
+```
+
 ### 서버 (server/src/)
 
 ```
@@ -181,6 +187,8 @@
 │   ├── projects.ts
 │   ├── members.ts
 │   ├── ai.ts                      # AI 회의 녹음/전사
+│   ├── teams.ts                   # 팀 API 조회 호환 라우트
+│   ├── routineTasks.ts            # 루틴 업무 API 조회 호환 라우트
 │   └── ...
 │
 ├── middleware/

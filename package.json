@@ -6,16 +6,22 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
+    "dev:db": "node scripts/dev-postgres.mjs",
+    "dev:api": "cd server && npm run dev",
+    "dev:web:server": "cd client && npm run dev:server",
+    "dev:full": "concurrently -n db,api,web \"npm run dev:db\" \"npm run dev:api\" \"npm run dev:web:server\"",
     "build": "npm run build:client && npm run build:server",
     "build:client": "cd client && npm install && npm run build",
     "build:server": "cd server && npm install && npm run build",
     "start": "cd server && npm run start",
-    "db:migrate": "cd server && npm run db:migrate"
+    "db:migrate": "cd server && npm run db:migrate",
+    "db:seed": "cd server && npm run db:seed"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "devDependencies": {
-    "concurrently": "^8.2.0"
+    "concurrently": "^8.2.0",
+    "embedded-postgres": "^18.3.0-beta.17"
   }
 }

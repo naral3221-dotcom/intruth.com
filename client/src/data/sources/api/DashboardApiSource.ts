@@ -3,7 +3,7 @@
  * Dashboard 관련 API 호출을 담당하는 클래스
  */
 import type { HttpClient } from './HttpClient';
-import type { DashboardStats, TeamProgress, ActivityLog, Task, Project } from '@/types';
+import type { DashboardStats, TeamProgress, ActivityLog, Task } from '@/types';
 import type { DashboardData, ProjectProgress } from '@/domain/repositories/IDashboardRepository';
 
 export interface DashboardApiFilters {
@@ -26,62 +26,87 @@ export class DashboardApiSource {
   constructor(private httpClient: HttpClient) {}
 
   async getDashboardData(filters?: DashboardApiFilters): Promise<DashboardData> {
-    const searchParams = new URLSearchParams();
-    if (filters?.startDate) searchParams.set('startDate', filters.startDate);
-    if (filters?.endDate) searchParams.set('endDate', filters.endDate);
-    if (filters?.teamId) searchParams.set('teamId', filters.teamId);
-    if (filters?.projectId) searchParams.set('projectId', filters.projectId);
-    const query = searchParams.toString();
-    return this.httpClient.get<DashboardData>(`/dashboard${query ? `?${query}` : ''}`);
+    const [stats, myTasks, teamProgress, recentActivities] = await Promise.all([
+      this.getStats(filters),
+      this.getMyTasks(),
+      this.getTeamProgress(),
+      this.getRecentActivities({ limit: 20 }),
+    ]);
+
+    return {
+      stats,
+      myTasks,
+      recentProjects: [],
+      teamProgress,
+      recentActivities,
+    };
   }
 
   async getStats(filters?: DashboardApiFilters): Promise<DashboardStats> {
-    const searchParams = new URLSearchParams();
-    searchParams.set('action', 'stats');
-    if (filters?.startDate) searchParams.set('startDate', filters.startDate);
-    if (filters?.endDate) searchParams.set('endDate', filters.endDate);
-    if (filters?.teamId) searchParams.set('teamId', filters.teamId);
-    if (filters?.projectId) searchParams.set('projectId', filters.projectId);
-    return this.httpClient.get<DashboardStats>(`/dashboard?${searchParams.toString()}`);
+    void filters;
+    return this.httpClient.get<DashboardStats>('/dashboard/summary');
   }
 
   async getMyTasks(): Promise<Task[]> {
-    return this.httpClient.get<Task[]>('/dashboard?action=my-tasks');
+    return this.httpClient.get<Task[]>('/dashboard/my-tasks');
   }
 
   async getMyOverdueTasks(): Promise<Task[]> {
-    return this.httpClient.get<Task[]>('/dashboard?action=my-overdue');
+    return this.httpClient.get<Task[]>('/dashboard/my-overdue');
   }
 
   async getMyUpcomingTasks(days: number = 7): Promise<Task[]> {
-    return this.httpClient.get<Task[]>(`/dashboard?action=my-upcoming&days=${days}`);
+    return this.httpClient.get<Task[]>(`/dashboard/my-upcoming?days=${days}`);
   }
 
   async getTeamProgress(): Promise<TeamProgress[]> {
-    return this.httpClient.get<TeamProgress[]>('/dashboard?action=team-progress');
+    return this.httpClient.get<TeamProgress[]>('/dashboard/team-progress');
   }
 
   async getMemberProgress(memberId: string): Promise<TeamProgress> {
-    return this.httpClient.get<TeamProgress>(`/dashboard?action=member-progress&memberId=${memberId}`);
+    return this.httpClient.get<TeamProgress>(`/dashboard/member-progress/${memberId}`);
   }
 
   async getRecentActivities(params?: ActivityApiListParams): Promise<ActivityLog[]> {
     const searchParams = new URLSearchParams();
-    searchParams.set('action', 'activities');
     if (params?.limit) searchParams.set('limit', String(params.limit));
     if (params?.offset) searchParams.set('offset', String(params.offset));
     if (params?.taskId) searchParams.set('taskId', params.taskId);
     if (params?.memberId) searchParams.set('memberId', params.memberId);
     if (params?.projectId) searchParams.set('projectId', params.projectId);
     if (params?.action) searchParams.set('actionType', params.action);
-    return this.httpClient.get<ActivityLog[]>(`/dashboard?${searchParams.toString()}`);
+    const query = searchParams.toString();
+    return this.httpClient.get<ActivityLog[]>(`/dashboard/recent-activities${query ? `?${query}` : ''}`);
   }
 
   async getProjectsProgress(): Promise<ProjectProgress[]> {
-    return this.httpClient.get<ProjectProgress[]>('/dashboard?action=projects-progress');
+    const projects = await this.httpClient.get<Array<{
+      id: string;
+      name: string;
+      status: ProjectProgress['status'];
+      total: number;
+      taskStats: { done: number };
+      completionRate: number;
+    }>>('/dashboard/projects-progress');
+
+    return projects.map((project) => ({
+      projectId: project.id,
+      projectName: project.name,
+      totalTasks: project.total,
+      completedTasks: project.taskStats.done,
+      progressPercent: project.completionRate,
+      status: project.status,
+    }));
   }
 
   async getProjectProgress(projectId: string): Promise<ProjectProgress> {
-    return this.httpClient.get<ProjectProgress>(`/dashboard?action=project-progress&projectId=${projectId}`);
+    const projects = await this.getProjectsProgress();
+    const project = projects.find((item) => item.projectId === projectId);
+
+    if (!project) {
+      throw new Error('프로젝트 진행 현황을 찾을 수 없습니다.');
+    }
+
+    return project;
   }
 }

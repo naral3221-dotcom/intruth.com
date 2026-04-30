@@ -28,6 +28,24 @@ async function login(page: Page) {
 function collectBrowserErrors(page: Page) {
   const errors: string[] = [];
 
+  page.on('response', (response) => {
+    const status = response.status();
+    const url = response.url();
+    if (status >= 400 && url.includes('/api/')) {
+      errors.push(`response: ${status} ${url}`);
+    }
+  });
+
+  page.on('requestfailed', (request) => {
+    const failure = request.failure()?.errorText || 'unknown';
+    if (failure === 'net::ERR_ABORTED') return;
+
+    const url = request.url();
+    if (url.includes('/api/') || ['fetch', 'xhr'].includes(request.resourceType())) {
+      errors.push(`requestfailed: ${failure} ${url}`);
+    }
+  });
+
   page.on('pageerror', (error) => {
     errors.push(`pageerror: ${error.message}`);
   });
@@ -36,6 +54,10 @@ function collectBrowserErrors(page: Page) {
     if (message.type() !== 'error') return;
     const text = message.text();
     if (text.includes('Download the React DevTools')) return;
+    if (text.includes('Failed to load resource')) return;
+    if (text.includes('[HttpClient] Network Error: TypeError: Failed to fetch')) return;
+    if (text.includes('[HttpClient] API Error:')) return;
+    if (text.includes('Failed to fetch monthly stats:')) return;
     errors.push(`console: ${text}`);
   });
 
