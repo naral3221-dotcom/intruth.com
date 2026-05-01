@@ -235,6 +235,47 @@ router.post('/assistant/ask', authenticate, async (req: AuthRequest, res: Respon
   }
 });
 
+router.get('/assistant/command-messages', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiAssistantService();
+    const messages = await service.listCommandMessages(
+      memberContext(req),
+      req.query.limit ? Number(req.query.limit) : undefined
+    );
+    res.json(messages);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.post('/assistant/command-messages', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiAssistantService();
+    const message = await service.recordCommandMessage(memberContext(req), {
+      role: req.body?.role,
+      content: req.body?.content,
+      route: req.body?.route,
+      metadata: req.body?.metadata,
+    });
+    res.status(201).json(message);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.delete('/assistant/command-messages', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiAssistantService();
+    const result = await service.clearCommandMessages(memberContext(req));
+    res.json(result);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
 router.get('/assistant/runs', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const service = getAiAssistantService();

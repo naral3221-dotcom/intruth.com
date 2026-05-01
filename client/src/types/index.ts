@@ -543,6 +543,31 @@ export interface AiAgentAction {
   updatedAt: string;
 }
 
+export type AiCommandMessageRole = 'assistant' | 'user';
+
+export interface AiCommandMessageMetadata {
+  actions?: AiAgentAction[];
+  quickActions?: Array<{ label: string; command: string }>;
+  clientMessageId?: string;
+  createdAt?: string;
+}
+
+export interface AiCommandMessage {
+  id: number;
+  role: AiCommandMessageRole;
+  content: string;
+  route?: string | null;
+  metadata?: AiCommandMessageMetadata | null;
+  createdAt: string;
+}
+
+export interface SaveAiCommandMessageInput {
+  role: AiCommandMessageRole;
+  content: string;
+  route?: string | null;
+  metadata?: AiCommandMessageMetadata | null;
+}
+
 export interface CreateAiTaskDraftActionResult {
   assistant: AiAssistantResult;
   action: AiAgentAction;

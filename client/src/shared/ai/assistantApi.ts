@@ -3,8 +3,10 @@ import type {
   AiAssistantHistoryItem,
   AiAssistantResult,
   AiAssistantScope,
+  AiCommandMessage,
   ApproveAiAgentActionResult,
   CreateAiTaskDraftActionResult,
+  SaveAiCommandMessageInput,
 } from '@/types';
 
 function getBaseUrl() {
@@ -69,6 +71,56 @@ export async function listAiAgentActions(limit = 8): Promise<AiAgentAction[]> {
   const token = getToken();
   const params = new URLSearchParams({ limit: String(limit) });
   const response = await requestAi(`/ai/assistant/actions?${params.toString()}`, {
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function listAiCommandMessages(limit = 30): Promise<AiCommandMessage[]> {
+  const token = getToken();
+  const params = new URLSearchParams({ limit: String(limit) });
+  const response = await requestAi(`/ai/assistant/command-messages?${params.toString()}`, {
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function saveAiCommandMessage(input: SaveAiCommandMessageInput): Promise<AiCommandMessage> {
+  const token = getToken();
+  const response = await requestAi('/ai/assistant/command-messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function clearAiCommandMessages(): Promise<{ deletedCount: number }> {
+  const token = getToken();
+  const response = await requestAi('/ai/assistant/command-messages', {
+    method: 'DELETE',
     headers: {
       ...(token && { Authorization: `Bearer ${token}` }),
     },

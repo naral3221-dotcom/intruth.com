@@ -72,6 +72,24 @@ export interface AiAssistantHistoryItem extends AiAssistantResult {
   createdAt: string;
 }
 
+type AiCommandMessageRole = 'assistant' | 'user';
+
+export interface AiCommandMessageInput {
+  role: AiCommandMessageRole;
+  content: string;
+  route?: string | null;
+  metadata?: unknown;
+}
+
+export interface AiCommandMessageItem {
+  id: number;
+  role: AiCommandMessageRole;
+  content: string;
+  route?: string | null;
+  metadata?: unknown;
+  createdAt: string;
+}
+
 export interface CreateAiTaskDraftActionInput extends AskAiAssistantInput {}
 
 export interface AiTaskDraft {
@@ -787,6 +805,37 @@ export class AiAssistantService {
     };
   }
 
+  private normalizeCommandRole(role: unknown): AiCommandMessageRole {
+    return role === 'user' ? 'user' : 'assistant';
+  }
+
+  private normalizeCommandContent(content: unknown) {
+    const normalized = String(content || '').replace(/\s+$/g, '').trimStart();
+    if (!normalized.trim()) {
+      throw new ValidationError('저장할 AI 명령 로그 내용이 없습니다.');
+    }
+
+    return normalized.slice(0, 6000);
+  }
+
+  private toCommandMessageItem(message: {
+    id: number;
+    role: string;
+    content: string;
+    route: string | null;
+    metadata: unknown;
+    createdAt: Date;
+  }): AiCommandMessageItem {
+    return {
+      id: message.id,
+      role: this.normalizeCommandRole(message.role),
+      content: message.content,
+      route: message.route,
+      metadata: message.metadata ?? null,
+      createdAt: message.createdAt.toISOString(),
+    };
+  }
+
   private estimateCostUsd(usage: AiAssistantUsageLog) {
     const inputRate = Number(process.env.OPENAI_ASSISTANT_INPUT_COST_PER_1M || 0);
     const outputRate = Number(process.env.OPENAI_ASSISTANT_OUTPUT_COST_PER_1M || 0);
@@ -884,6 +933,39 @@ export class AiAssistantService {
     });
 
     return runs.map((run) => this.toHistoryItem(run));
+  }
+
+  async listCommandMessages(member: MemberContext, limit = 30): Promise<AiCommandMessageItem[]> {
+    const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 100);
+    const messages = await this.prisma.aiCommandMessage.findMany({
+      where: { memberId: member.id },
+      orderBy: { createdAt: 'desc' },
+      take: safeLimit,
+    });
+
+    return messages.reverse().map((message) => this.toCommandMessageItem(message));
+  }
+
+  async recordCommandMessage(member: MemberContext, input: AiCommandMessageInput): Promise<AiCommandMessageItem> {
+    const message = await this.prisma.aiCommandMessage.create({
+      data: {
+        memberId: member.id,
+        role: this.normalizeCommandRole(input.role),
+        content: this.normalizeCommandContent(input.content),
+        route: input.route ? String(input.route).slice(0, 240) : undefined,
+        metadata: input.metadata == null ? undefined : input.metadata as Prisma.InputJsonValue,
+      },
+    });
+
+    return this.toCommandMessageItem(message);
+  }
+
+  async clearCommandMessages(member: MemberContext) {
+    const result = await this.prisma.aiCommandMessage.deleteMany({
+      where: { memberId: member.id },
+    });
+
+    return { deletedCount: result.count };
   }
 
   async listAgentActions(member: MemberContext, limit = 8): Promise<AiAgentActionItem[]> {

@@ -19,11 +19,15 @@ import { useAuthStore } from "@/stores/authStore";
 import {
   approveAiAgentAction,
   askAiAssistant,
+  clearAiCommandMessages,
   createAiTaskDraftAction,
   listAiAgentActions,
+  listAiAssistantRuns,
+  listAiCommandMessages,
   rejectAiAgentAction,
+  saveAiCommandMessage,
 } from "@/shared/ai/assistantApi";
-import type { AiAgentAction } from "@/types";
+import type { AiAgentAction, AiAssistantHistoryItem, AiCommandMessage } from "@/types";
 
 type QuickAction = {
   label: string;
@@ -342,6 +346,77 @@ function restoreConversation(chatStorageKey: string, pendingStorageKey: string) 
   return messages;
 }
 
+function isDefaultMessage(message: AgentMessage) {
+  return message.role === "assistant" && message.content === welcomeMessage;
+}
+
+function commandMessageToAgentMessage(message: AiCommandMessage): AgentMessage {
+  const metadata = message.metadata || {};
+
+  return {
+    id: `server-${message.id}`,
+    role: message.role,
+    content: message.content,
+    actions: metadata.actions,
+    quickActions: metadata.quickActions,
+    createdAt: metadata.createdAt || message.createdAt,
+  };
+}
+
+function buildMessagesFromServerHistory(runs: AiAssistantHistoryItem[], actions: AiAgentAction[]) {
+  const actionRunIds = new Set(
+    actions
+      .map((action) => action.assistantRunId)
+      .filter((runId): runId is number => typeof runId === "number")
+  );
+  const events: Array<{ createdAt: string; messages: AgentMessage[] }> = [];
+
+  runs
+    .filter((run) => !actionRunIds.has(run.id))
+    .forEach((run) => {
+      events.push({
+        createdAt: run.createdAt,
+        messages: [
+          {
+            id: `run-${run.id}-user`,
+            role: "user",
+            content: run.prompt,
+            createdAt: run.createdAt,
+          },
+          {
+            id: `run-${run.id}-assistant`,
+            role: "assistant",
+            content: run.answer,
+            quickActions: getFollowUpActions(run.prompt, run.answer),
+            createdAt: run.generatedAt || run.createdAt,
+          },
+        ],
+      });
+    });
+
+  actions.forEach((action) => {
+    const content = `이전 AI 업무 초안을 복원했어요. ${summarizeAction(action)} 항목을 다시 확인할 수 있습니다.`;
+    events.push({
+      createdAt: action.createdAt,
+      messages: [
+        {
+          id: `action-${action.id}-assistant`,
+          role: "assistant",
+          content,
+          actions: [action],
+          quickActions: [{ label: "승인 대기 보기", command: "AI 승인 대기 보여줘" }],
+          createdAt: action.createdAt,
+        },
+      ],
+    });
+  });
+
+  return events
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .flatMap((event) => event.messages)
+    .slice(-maxStoredMessages);
+}
+
 export function AgentCommandCenter() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -353,6 +428,7 @@ export function AgentCommandCenter() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const lastStorageKeyRef = useRef(chatStorageKey);
   const skipNextSaveRef = useRef(false);
+  const serverHydratedUserKeyRef = useRef<string | null>(null);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -406,8 +482,27 @@ export function AgentCommandCenter() {
     textarea.style.height = `${Math.min(textarea.scrollHeight, 132)}px`;
   }, [input]);
 
-  const appendMessage = (message: AgentMessage) => {
-    setMessages((current) => [...current, message].slice(-24));
+  const persistCommandMessage = (message: AgentMessage, route = location.pathname) => {
+    if (isDefaultMessage(message)) return;
+
+    void saveAiCommandMessage({
+      role: message.role,
+      content: message.content,
+      route,
+      metadata: {
+        actions: message.actions,
+        quickActions: message.quickActions,
+        clientMessageId: message.id,
+        createdAt: message.createdAt,
+      },
+    }).catch(() => null);
+  };
+
+  const appendMessage = (message: AgentMessage, options: { persist?: boolean } = {}) => {
+    setMessages((current) => [...current, message].slice(-maxStoredMessages));
+    if (options.persist !== false) {
+      persistCommandMessage(message);
+    }
   };
 
   const updateActionInMessages = (updatedAction: AiAgentAction) => {
@@ -421,6 +516,7 @@ export function AgentCommandCenter() {
 
   const resetConversation = () => {
     clearPendingCommand(pendingStorageKey);
+    void clearAiCommandMessages().catch(() => null);
     setMessages([
       createMessage("assistant", "저장된 대화를 정리했어요. 새로 필요한 일을 바로 말해주세요.", {
         quickActions: commandSuggestions.slice(0, 3),
@@ -428,6 +524,59 @@ export function AgentCommandCenter() {
     ]);
     setInput("");
   };
+
+  useEffect(() => {
+    if (!authUser?.id || serverHydratedUserKeyRef.current === storageUserKey) return;
+
+    serverHydratedUserKeyRef.current = storageUserKey;
+    let active = true;
+
+    const hydrateFromServer = async () => {
+      try {
+        const serverMessages = await listAiCommandMessages(maxStoredMessages);
+        if (!active) return;
+
+        if (serverMessages.length > 0) {
+          setMessages(serverMessages.map(commandMessageToAgentMessage));
+          return;
+        }
+
+        const [runs, actions] = await Promise.all([
+          listAiAssistantRuns(8).catch(() => []),
+          listAiAgentActions(8).catch(() => []),
+        ]);
+        if (!active) return;
+
+        const legacyMessages = buildMessagesFromServerHistory(runs, actions);
+        if (legacyMessages.length > 0) {
+          setMessages(legacyMessages);
+          legacyMessages.filter((message) => !isDefaultMessage(message)).forEach((message) => {
+            persistCommandMessage(message);
+          });
+          return;
+        }
+
+        const localMessages =
+          readStoredMessages(chatStorageKey) ||
+          readStoredMessages(getChatStorageKey(getStorageUserKey(null, authUser.username))) ||
+          readStoredMessages(getChatStorageKey("anonymous"));
+
+        localMessages
+          ?.filter((message) => !isDefaultMessage(message))
+          .forEach((message) => {
+            persistCommandMessage(message);
+          });
+      } catch {
+        // Local storage keeps the chat usable if the API is temporarily unavailable.
+      }
+    };
+
+    void hydrateFromServer();
+
+    return () => {
+      active = false;
+    };
+  }, [authUser?.id, authUser?.username, chatStorageKey, storageUserKey]);
 
   const runLocalCommand = async (command: string): Promise<LocalCommandResult | null> => {
     const normalized = command.toLowerCase().trim();

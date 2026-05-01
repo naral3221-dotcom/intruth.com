@@ -44,6 +44,7 @@ model Member {
   comments             Comment[]
   activityLogs         ActivityLog[]
   assistantRuns        AiAssistantRun[]
+  commandMessages      AiCommandMessage[]
   agentActions         AiAgentAction[]  @relation("AiAgentActionOwner")
   reviewedAgentActions AiAgentAction[]  @relation("AiAgentActionReviewer")
 
@@ -369,6 +370,21 @@ model AiAssistantRun {
 
   @@index([memberId, createdAt])
   @@map("wf_ai_assistant_runs")
+}
+
+model AiCommandMessage {
+  id        Int      @id @default(autoincrement())
+  memberId  String   @map("member_id")
+  role      String
+  content   String
+  route     String?
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, createdAt])
+  @@map("wf_ai_command_messages")
 }
 
 model AiAgentAction {
