@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useTaskStore } from "@/stores/taskStore";
+import { useAuthStore } from "@/stores/authStore";
 import {
   approveAiAgentAction,
   askAiAssistant,
@@ -35,6 +36,7 @@ type AgentMessage = {
   content: string;
   actions?: AiAgentAction[];
   quickActions?: QuickAction[];
+  createdAt?: string;
 };
 
 type LocalCommandResult =
@@ -68,6 +70,22 @@ const routeCommands = [
 const welcomeMessage =
   "무엇부터 도와드릴까요? 회의 안건을 같이 만들거나, 새 업무/회의를 열고, AI 승인 대기 항목을 처리할 수 있어요.";
 
+const maxStoredMessages = 30;
+const chatStoragePrefix = "intruth.ai.commandCenter.messages.v1";
+const pendingStoragePrefix = "intruth.ai.commandCenter.pending.v1";
+
+type StoredConversation = {
+  version: 1;
+  messages: AgentMessage[];
+  updatedAt: string;
+};
+
+type PendingCommand = {
+  command: string;
+  route: string;
+  startedAt: string;
+};
+
 function createMessage(
   role: AgentMessage["role"],
   content: string,
@@ -77,8 +95,17 @@ function createMessage(
     id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     role,
     content,
+    createdAt: new Date().toISOString(),
     ...options,
   };
+}
+
+function createDefaultMessages() {
+  return [
+    createMessage("assistant", welcomeMessage, {
+      quickActions: commandSuggestions.slice(0, 3),
+    }),
+  ];
 }
 
 function containsAny(text: string, words: string[]) {
@@ -211,20 +238,126 @@ function isClearCommand(command: string) {
   return normalized === "/clear" || containsAny(normalized, ["대화 초기화", "대화 지워", "채팅 초기화"]);
 }
 
+function getStorageUserKey(userId?: string | null, username?: string | null) {
+  return userId || username || "anonymous";
+}
+
+function getChatStorageKey(userKey: string) {
+  return `${chatStoragePrefix}:${userKey}`;
+}
+
+function getPendingStorageKey(userKey: string) {
+  return `${pendingStoragePrefix}:${userKey}`;
+}
+
+function sanitizeMessages(value: unknown): AgentMessage[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const messages = value.filter((message): message is AgentMessage => {
+    if (!message || typeof message !== "object") return false;
+    const candidate = message as Partial<AgentMessage>;
+    return (candidate.role === "assistant" || candidate.role === "user") && typeof candidate.content === "string";
+  });
+
+  return messages.length > 0 ? messages.slice(-maxStoredMessages) : null;
+}
+
+function readStoredMessages(storageKey: string) {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredConversation>;
+    return sanitizeMessages(parsed.messages);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredMessages(storageKey: string, messages: AgentMessage[]) {
+  if (typeof window === "undefined") return;
+
+  const payload: StoredConversation = {
+    version: 1,
+    messages: messages.slice(-maxStoredMessages),
+    updatedAt: new Date().toISOString(),
+  };
+  window.localStorage.setItem(storageKey, JSON.stringify(payload));
+}
+
+function readPendingCommand(storageKey: string): PendingCommand | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PendingCommand>;
+    if (typeof parsed.command !== "string" || typeof parsed.startedAt !== "string") return null;
+    return {
+      command: parsed.command,
+      route: typeof parsed.route === "string" ? parsed.route : "",
+      startedAt: parsed.startedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writePendingCommand(storageKey: string, command: string, route: string) {
+  if (typeof window === "undefined") return;
+
+  const payload: PendingCommand = {
+    command,
+    route,
+    startedAt: new Date().toISOString(),
+  };
+  window.localStorage.setItem(storageKey, JSON.stringify(payload));
+}
+
+function clearPendingCommand(storageKey: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(storageKey);
+}
+
+function restoreConversation(chatStorageKey: string, pendingStorageKey: string) {
+  const restored = readStoredMessages(chatStorageKey) || createDefaultMessages();
+  const pending = readPendingCommand(pendingStorageKey);
+
+  if (!pending) return restored;
+
+  clearPendingCommand(pendingStorageKey);
+  const interruptedMessage = createMessage(
+    "assistant",
+    `이전 명령 "${pending.command}" 처리 중 연결이 끊겼어요. 실제로 무엇이 생성됐는지는 해당 페이지와 AI 승인 대기 목록에서 확인할 수 있습니다.`,
+    {
+      quickActions: [
+        { label: "승인 대기 보기", command: "AI 승인 대기 보여줘" },
+        { label: "회의자료 확인", command: "회의 페이지로 이동" },
+      ],
+    }
+  );
+  const messages = [...restored, interruptedMessage].slice(-maxStoredMessages);
+  writeStoredMessages(chatStorageKey, messages);
+  return messages;
+}
+
 export function AgentCommandCenter() {
   const navigate = useNavigate();
   const location = useLocation();
+  const authUser = useAuthStore((state) => state.user);
+  const storageUserKey = getStorageUserKey(authUser?.id, authUser?.username);
+  const chatStorageKey = getChatStorageKey(storageUserKey);
+  const pendingStorageKey = getPendingStorageKey(storageUserKey);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const lastStorageKeyRef = useRef(chatStorageKey);
+  const skipNextSaveRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [reviewingActionId, setReviewingActionId] = useState<number | null>(null);
-  const [messages, setMessages] = useState<AgentMessage[]>([
-    createMessage("assistant", welcomeMessage, {
-      quickActions: commandSuggestions.slice(0, 3),
-    }),
-  ]);
+  const [messages, setMessages] = useState<AgentMessage[]>(() => restoreConversation(chatStorageKey, pendingStorageKey));
 
   const {
     selectedProjectId,
@@ -238,6 +371,23 @@ export function AgentCommandCenter() {
     const current = routeCommands.find((route) => route.path === location.pathname);
     return current ? `현재 위치: ${current.label}` : "현재 페이지에서 실행";
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (lastStorageKeyRef.current === chatStorageKey) return;
+
+    skipNextSaveRef.current = true;
+    setMessages(restoreConversation(chatStorageKey, pendingStorageKey));
+    lastStorageKeyRef.current = chatStorageKey;
+  }, [chatStorageKey, pendingStorageKey]);
+
+  useEffect(() => {
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+
+    writeStoredMessages(chatStorageKey, messages);
+  }, [chatStorageKey, messages]);
 
   useEffect(() => {
     if (!open) return;
@@ -270,8 +420,9 @@ export function AgentCommandCenter() {
   };
 
   const resetConversation = () => {
+    clearPendingCommand(pendingStorageKey);
     setMessages([
-      createMessage("assistant", "대화를 정리했어요. 새로 필요한 일을 바로 말해주세요.", {
+      createMessage("assistant", "저장된 대화를 정리했어요. 새로 필요한 일을 바로 말해주세요.", {
         quickActions: commandSuggestions.slice(0, 3),
       }),
     ]);
@@ -364,6 +515,7 @@ export function AgentCommandCenter() {
       return;
     }
 
+    writePendingCommand(pendingStorageKey, trimmed, location.pathname);
     appendMessage(createMessage("user", trimmed));
     setInput("");
     setBusy(true);
@@ -412,6 +564,7 @@ export function AgentCommandCenter() {
         )
       );
     } finally {
+      clearPendingCommand(pendingStorageKey);
       setBusy(false);
     }
   };
@@ -489,8 +642,8 @@ export function AgentCommandCenter() {
                 type="button"
                 onClick={resetConversation}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label="대화 초기화"
-                title="대화 초기화"
+                aria-label="저장된 대화 초기화"
+                title="저장된 대화 초기화"
               >
                 <Eraser className="h-4 w-4" />
               </button>
@@ -648,7 +801,7 @@ export function AgentCommandCenter() {
             </form>
             <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <Sparkles className="h-3.5 w-3.5" />
-              Enter로 보내고 Shift+Enter로 줄바꿈
+              최근 대화 저장됨 · Shift+Enter 줄바꿈
             </p>
           </div>
         </section>
