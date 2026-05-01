@@ -15,7 +15,15 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react';
-import type { ActivityLog, AiAssistantHistoryItem, AiAssistantResult, DashboardStats, Meeting, Task } from '@/types';
+import type {
+  ActivityLog,
+  AiAssistantHistoryItem,
+  AiAssistantResult,
+  AiAssistantScopeType,
+  DashboardStats,
+  Meeting,
+  Task,
+} from '@/types';
 import type { ProjectStats } from '../hooks/useDashboard';
 import { cn } from '@/core/utils/cn';
 import { shareKakaoText, type ShareResult } from '@/shared/share/kakaoShare';
@@ -33,6 +41,14 @@ interface MobileDashboardHomeProps {
   onCreateTask: () => void;
   onCreateMeeting: () => void;
   onCreateProject: () => void;
+}
+
+interface AssistantScopeOption {
+  key: string;
+  type: AiAssistantScopeType;
+  id?: string;
+  label: string;
+  detail: string;
 }
 
 function startOfToday() {
@@ -79,6 +95,10 @@ function notifyShareResult(result: ShareResult) {
   }
 
   toast.info('공유를 완료했습니다.');
+}
+
+function scopeKey(type: AiAssistantScopeType, id?: string) {
+  return `${type}:${id || 'all'}`;
 }
 
 function QuickTile({
@@ -187,6 +207,7 @@ export function MobileDashboardHome({
   const [assistantResult, setAssistantResult] = useState<AiAssistantResult | null>(null);
   const [assistantHistory, setAssistantHistory] = useState<AiAssistantHistoryItem[]>([]);
   const [assistantHistoryLoading, setAssistantHistoryLoading] = useState(false);
+  const [assistantScopeKey, setAssistantScopeKey] = useState(scopeKey('GLOBAL'));
   const [sharingAssistant, setSharingAssistant] = useState(false);
 
   const focusTasks = useMemo(() => {
@@ -235,6 +256,54 @@ export function MobileDashboardHome({
   const projectCompletion = projectStats.total
     ? Math.round((projectStats.completed / projectStats.total) * 100)
     : 0;
+
+  const assistantScopeOptions = useMemo<AssistantScopeOption[]>(() => {
+    const options: AssistantScopeOption[] = [
+      { key: scopeKey('GLOBAL'), type: 'GLOBAL', label: '전체', detail: '내 업무와 회의' },
+    ];
+    const projectOptions = new Map<string, AssistantScopeOption>();
+
+    myTasks.forEach((task) => {
+      if (task.project?.id && task.project.name) {
+        projectOptions.set(task.project.id, {
+          key: scopeKey('PROJECT', task.project.id),
+          type: 'PROJECT',
+          id: task.project.id,
+          label: task.project.name,
+          detail: '프로젝트',
+        });
+      }
+    });
+
+    meetings.forEach((meeting) => {
+      if (meeting.project?.id && meeting.project.name) {
+        projectOptions.set(meeting.project.id, {
+          key: scopeKey('PROJECT', meeting.project.id),
+          type: 'PROJECT',
+          id: meeting.project.id,
+          label: meeting.project.name,
+          detail: '프로젝트',
+        });
+      }
+    });
+
+    const meetingOptions = meetings
+      .slice()
+      .sort((a, b) => new Date(b.meetingDate).getTime() - new Date(a.meetingDate).getTime())
+      .slice(0, 8)
+      .map((meeting) => ({
+        key: scopeKey('MEETING', String(meeting.id)),
+        type: 'MEETING' as const,
+        id: String(meeting.id),
+        label: meeting.title,
+        detail: `회의 · ${formatShortDate(meeting.meetingDate)}`,
+      }));
+
+    return [...options, ...Array.from(projectOptions.values()).slice(0, 8), ...meetingOptions];
+  }, [meetings, myTasks]);
+
+  const selectedAssistantScope = assistantScopeOptions.find((option) => option.key === assistantScopeKey)
+    || assistantScopeOptions[0];
 
   const handleShareWeeklyBrief = async () => {
     setSharingBrief(true);
@@ -287,7 +356,10 @@ export function MobileDashboardHome({
     setAssistantPrompt(trimmed);
     setAssistantLoading(true);
     try {
-      const result = await askAiAssistant(trimmed);
+      const result = await askAiAssistant(trimmed, {
+        type: selectedAssistantScope.type,
+        id: selectedAssistantScope.id,
+      });
       setAssistantResult(result);
       void loadAssistantHistory();
     } catch (error) {
@@ -306,6 +378,10 @@ export function MobileDashboardHome({
 
   const handleSelectAssistantHistory = (item: AiAssistantHistoryItem) => {
     setAssistantPrompt(item.prompt);
+    const key = scopeKey(item.scope.type, item.scope.id);
+    if (assistantScopeOptions.some((option) => option.key === key)) {
+      setAssistantScopeKey(key);
+    }
     if (item.status === 'COMPLETED') {
       setAssistantResult(item);
     }
@@ -381,25 +457,42 @@ export function MobileDashboardHome({
           </div>
 
           <form
-            className="flex gap-2"
+            className="space-y-2"
             onSubmit={(event) => {
               event.preventDefault();
               void handleAskAssistant();
             }}
           >
-            <input
-              value={assistantPrompt}
-              onChange={(event) => setAssistantPrompt(event.target.value)}
-              className="aboard-input min-w-0 flex-1"
-              placeholder="무엇을 확인할까요?"
-            />
-            <button
-              type="submit"
-              disabled={assistantLoading || !assistantPrompt.trim()}
-              className="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-            >
-              {assistantLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : '확인'}
-            </button>
+            <label className="block text-xs font-semibold text-muted-foreground">
+              조회 범위
+              <select
+                value={assistantScopeKey}
+                onChange={(event) => setAssistantScopeKey(event.target.value)}
+                className="mt-1 min-h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:border-primary"
+              >
+                {assistantScopeOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label} · {option.detail}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex gap-2">
+              <input
+                value={assistantPrompt}
+                onChange={(event) => setAssistantPrompt(event.target.value)}
+                className="aboard-input min-w-0 flex-1"
+                placeholder="무엇을 확인할까요?"
+              />
+              <button
+                type="submit"
+                disabled={assistantLoading || !assistantPrompt.trim()}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+              >
+                {assistantLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : '확인'}
+              </button>
+            </div>
           </form>
 
           <div className="flex flex-wrap gap-2">
@@ -438,7 +531,11 @@ export function MobileDashboardHome({
                   >
                     <span className="line-clamp-2 text-xs font-semibold text-foreground">{item.prompt}</span>
                     <span className="mt-2 block text-[11px] text-muted-foreground">
-                      {formatShortDate(item.createdAt)} · {item.mode === 'openai' ? 'OpenAI' : 'Local'}
+                      {item.scope.label} · {formatShortDate(item.createdAt)}
+                    </span>
+                    <span className="mt-1 block text-[11px] text-muted-foreground">
+                      {item.mode === 'openai' ? 'OpenAI' : 'Local'}
+                      {item.usage?.totalTokens ? ` · ${item.usage.totalTokens.toLocaleString()} tokens` : ''}
                     </span>
                     {item.status === 'FAILED' && (
                       <span className="mt-1 block text-[11px] text-amber-600">실패</span>
@@ -465,7 +562,8 @@ export function MobileDashboardHome({
                 </div>
               )}
               <p className="text-[11px] text-muted-foreground">
-                업무 {assistantResult.sourceCounts.tasks}개 · 회의 {assistantResult.sourceCounts.meetings}건 · 프로젝트 {assistantResult.sourceCounts.projects}개
+                {assistantResult.scope.label} · 업무 {assistantResult.sourceCounts.tasks}개 · 회의 {assistantResult.sourceCounts.meetings}건 · 프로젝트 {assistantResult.sourceCounts.projects}개
+                {assistantResult.usage?.totalTokens ? ` · ${assistantResult.usage.totalTokens.toLocaleString()} tokens` : ''}
               </p>
             </div>
           )}

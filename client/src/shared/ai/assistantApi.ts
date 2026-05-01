@@ -1,4 +1,4 @@
-import type { AiAssistantHistoryItem, AiAssistantResult } from '@/types';
+import type { AiAssistantHistoryItem, AiAssistantResult, AiAssistantScope } from '@/types';
 
 function getBaseUrl() {
   return import.meta.env.VITE_API_BASE_URL || '/api';
@@ -13,7 +13,10 @@ async function parseError(response: Response) {
   return data?.error || 'AI 요청 처리에 실패했습니다.';
 }
 
-export async function askAiAssistant(prompt: string): Promise<AiAssistantResult> {
+export async function askAiAssistant(
+  prompt: string,
+  scope?: Pick<AiAssistantScope, 'type' | 'id'>
+): Promise<AiAssistantResult> {
   const token = getToken();
   const response = await fetch(`${getBaseUrl()}/ai/assistant/ask`, {
     method: 'POST',
@@ -21,7 +24,7 @@ export async function askAiAssistant(prompt: string): Promise<AiAssistantResult>
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
     },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, scope }),
   });
 
   if (!response.ok) {

@@ -342,12 +342,22 @@ model AiAssistantRun {
   id                 Int      @id @default(autoincrement())
   memberId           String   @map("member_id")
   prompt             String
+  scopeType          String   @default("GLOBAL") @map("scope_type")
+  scopeId            String?  @map("scope_id")
+  scopeLabel         String?  @map("scope_label")
   answer             String
   highlights         Json
   suggestedQuestions Json     @map("suggested_questions")
   kakaoBrief         String   @map("kakao_brief")
   sourceCounts       Json     @map("source_counts")
   mode               String
+  model              String?
+  inputTokens        Int?     @map("input_tokens")
+  outputTokens       Int?     @map("output_tokens")
+  totalTokens        Int?     @map("total_tokens")
+  cachedTokens       Int?     @map("cached_tokens")
+  reasoningTokens    Int?     @map("reasoning_tokens")
+  estimatedCostUsd   Float?   @map("estimated_cost_usd")
   status             String   @default("COMPLETED") // COMPLETED, FAILED
   errorMessage       String?  @map("error_message")
   createdAt          DateTime @default(now()) @map("created_at")

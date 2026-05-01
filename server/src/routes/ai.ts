@@ -221,6 +221,12 @@ router.post('/assistant/ask', authenticate, async (req: AuthRequest, res: Respon
     const service = getAiAssistantService();
     const result = await service.ask(memberContext(req), {
       prompt: String(req.body?.prompt || ''),
+      scope: req.body?.scope
+        ? {
+          type: req.body.scope.type,
+          id: req.body.scope.id,
+        }
+        : undefined,
     });
     res.json(result);
   } catch (error) {

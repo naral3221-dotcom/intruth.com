@@ -458,8 +458,27 @@ export interface MeetingActionItemTaskOverride {
   dueDate?: string | null;
 }
 
+export type AiAssistantScopeType = 'GLOBAL' | 'PROJECT' | 'MEETING';
+
+export interface AiAssistantScope {
+  type: AiAssistantScopeType;
+  id?: string;
+  label: string;
+}
+
+export interface AiAssistantUsage {
+  model?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+  cachedTokens?: number | null;
+  reasoningTokens?: number | null;
+  estimatedCostUsd?: number | null;
+}
+
 export interface AiAssistantResult {
   runId?: number;
+  scope: AiAssistantScope;
   answer: string;
   highlights: string[];
   suggestedQuestions: string[];
@@ -471,6 +490,7 @@ export interface AiAssistantResult {
   };
   generatedAt: string;
   mode: 'openai' | 'local';
+  usage?: AiAssistantUsage;
 }
 
 export interface AiAssistantHistoryItem extends AiAssistantResult {

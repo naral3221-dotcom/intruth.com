@@ -13,7 +13,7 @@ flowchart LR
   P1 --> P2["Phase 2\n회의 녹음/전사\n완료"]
   P2 --> P3["Phase 3\n회의자료 초안 승인\n완료"]
   P3 --> P4["Phase 4\n액션 아이템 -> 업무\n2차 완료"]
-  P4 --> P5["Phase 5\nAI Assistant 읽기 모드\n1차 보강 완료"]
+  P4 --> P5["Phase 5\nAI Assistant 읽기 모드\n2차 완료"]
   P5 --> P6["Phase 6\n승인 기반 쓰기 Agent\n대기"]
   P6 --> P7["Phase 7\nVPS/GitHub 배포\n대기"]
 ```
@@ -29,7 +29,7 @@ flowchart LR
 | 2. 회의 녹음/전사 | ✅ 1차 완료 | ██████████ 100% | 녹음 업로드, 서버 저장, OpenAI 전사, 전사 결과 저장/미리보기 | 25MB 초과 파일 압축/청크 |
 | 3. 회의자료 초안 승인 | ✅ 1차 완료 | ██████████ 100% | AI 자료 초안 저장, 초안 목록/적용/폐기 API, 모바일 승인 UI, 회의자료/액션아이템 반영 | 감사/비용 로그 연결 |
 | 4. 액션 아이템 -> 업무 | ✅ 2차 완료 | ██████████ 100% | 회의 할 일 선택, 승인 후 Task 생성, MeetingActionItem-Task 연결, 중복 전환 방지, 담당자 이름 자동 매칭, 생성 직후 카카오 공유, 업무 후보 카드 편집 | 운영 중 피드백 반영 |
-| 5. AI Assistant 읽기 모드 | ✅ 1차 보강 완료 | ████████░░ 80% | 멤버별 미완료 업무/회의/프로젝트 읽기, OpenAI/로컬 요약, 모바일 AI 요청 패널, 카카오 브리핑 공유, 최근 요청 기록/재열람 | 토큰/비용 로그, 질의 범위 선택 |
+| 5. AI Assistant 읽기 모드 | ✅ 2차 완료 | █████████░ 90% | 멤버별 미완료 업무/회의/프로젝트 읽기, 범위 선택, OpenAI/로컬 요약, 모바일 AI 요청 패널, 카카오 브리핑 공유, 최근 요청 기록/재열람, 토큰 사용량 기록 | 대화형 문맥 이어가기, 비용 단가 운영 설정 |
 | 6. 승인 기반 쓰기 Agent | ⏳ 대기 | ░░░░░░░░░░ 0% | 승인 원칙 수립 | 업무/회의/프로젝트 생성 도구, 승인 카드, 실행 로그 |
 | 7. VPS/GitHub 배포 | ⏳ 대기 | ░░░░░░░░░░ 0% | GitHub 저장소 준비 | Docker/Nginx/HTTPS/PostgreSQL/환경변수/배포 자동화 |
 
@@ -49,15 +49,16 @@ flowchart LR
 - 회의 할 일을 업무로 만들기 전 제목/설명/담당자/마감일/우선순위 편집
 - 로그인 멤버의 업무/회의/프로젝트를 읽어 답하는 AI Assistant 1차 버전
 - AI Assistant 최근 요청 기록 저장과 모바일 재열람
+- AI Assistant 조회 범위 선택과 OpenAI 토큰 사용량 기록
 - Playwright 모바일/데스크톱 UI 감사 통과
 
 ---
 
 ## 다음 추천 순서
 
-1. Phase 5 보강: AI Assistant 질의 범위 선택
-2. Phase 5 보강: OpenAI 토큰/비용 사용량 기록
-3. Phase 6 설계: 승인 카드와 AgentAction 실행 로그 모델
+1. Phase 5 마무리: 이전 질문을 문맥으로 이어가는 대화형 흐름
+2. Phase 6 설계: 승인 카드와 AgentAction 실행 로그 모델
+3. Phase 6: 읽기 결과에서 업무/회의/프로젝트 초안을 만드는 승인 카드
 4. Phase 6: 승인 기반으로 업무/회의/프로젝트를 생성하는 Agent 도구
 5. Phase 7: GitHub Actions + VPS 배포 자동화
 
@@ -101,4 +102,6 @@ flowchart LR
 | 모바일 AI 요청 UI | ✅ 홈 빠른 타일과 하단 패널 추가 |
 | 카카오 브리핑 공유 | ✅ Assistant 응답의 `kakaoBrief` 공유 버튼 추가 |
 | AI Assistant 기록 | ✅ `AiAssistantRun` 저장 및 `/api/ai/assistant/runs` 조회 확인 |
+| AI Assistant 범위 선택 | ✅ 프로젝트 범위 API 호출과 기록 저장 확인 |
+| OpenAI 토큰 사용량 기록 | ✅ `usage.total_tokens` 저장 및 모바일 표시 확인 |
 | Playwright UI 감사 | ✅ 6 passed, 2 skipped |

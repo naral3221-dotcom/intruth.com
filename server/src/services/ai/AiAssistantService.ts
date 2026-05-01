@@ -3,8 +3,8 @@
  * 읽기 전용 사역 운영 비서
  */
 import OpenAI from 'openai';
-import { PrismaClient } from '@prisma/client';
-import { ValidationError } from '../../shared/errors.js';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 
 interface MemberContext {
   id: string;
@@ -13,10 +13,39 @@ interface MemberContext {
 
 export interface AskAiAssistantInput {
   prompt: string;
+  scope?: {
+    type?: string;
+    id?: string | number | null;
+  };
+}
+
+type AiAssistantScopeType = 'GLOBAL' | 'PROJECT' | 'MEETING';
+
+interface AiAssistantScope {
+  type: AiAssistantScopeType;
+  id?: string;
+  label: string;
+  projectId?: string;
+  meetingId?: number;
+}
+
+interface AiAssistantUsageLog {
+  model?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
+  cachedTokens?: number | null;
+  reasoningTokens?: number | null;
+  estimatedCostUsd?: number | null;
 }
 
 export interface AiAssistantResult {
   runId?: number;
+  scope: {
+    type: AiAssistantScopeType;
+    id?: string;
+    label: string;
+  };
   answer: string;
   highlights: string[];
   suggestedQuestions: string[];
@@ -28,6 +57,7 @@ export interface AiAssistantResult {
   };
   generatedAt: string;
   mode: 'openai' | 'local';
+  usage?: AiAssistantUsageLog;
 }
 
 export interface AiAssistantHistoryItem extends AiAssistantResult {
@@ -66,10 +96,137 @@ export class AiAssistantService {
     return normalized;
   }
 
-  private async collectContext(member: MemberContext) {
+  private normalizeScopeInput(input?: AskAiAssistantInput['scope']) {
+    const type = String(input?.type || 'GLOBAL').toUpperCase();
+    const id = input?.id == null ? undefined : String(input.id);
+
+    if (!['GLOBAL', 'PROJECT', 'MEETING'].includes(type)) {
+      throw new ValidationError('AI 조회 범위가 올바르지 않습니다.');
+    }
+
+    return { type: type as AiAssistantScopeType, id };
+  }
+
+  private async resolveScope(member: MemberContext, input?: AskAiAssistantInput['scope']): Promise<AiAssistantScope> {
+    const requested = this.normalizeScopeInput(input);
+    const isAdmin = Boolean(member.permissions?.system?.manage_settings);
+
+    if (requested.type === 'GLOBAL') {
+      return { type: 'GLOBAL', label: '전체' };
+    }
+
+    if (!requested.id) {
+      throw new ValidationError('AI 조회 범위 ID가 필요합니다.');
+    }
+
+    if (requested.type === 'PROJECT') {
+      const project = await this.prisma.project.findUnique({
+        where: { id: requested.id },
+        select: {
+          id: true,
+          name: true,
+          ownerId: true,
+          members: { select: { memberId: true } },
+        },
+      });
+
+      if (!project) {
+        throw new ValidationError('선택한 프로젝트를 찾을 수 없습니다.');
+      }
+
+      const canRead = isAdmin || project.ownerId === member.id || project.members.some((item) => item.memberId === member.id);
+      if (!canRead) {
+        throw new ForbiddenError('선택한 프로젝트를 조회할 권한이 없습니다.');
+      }
+
+      return { type: 'PROJECT', id: project.id, label: project.name, projectId: project.id };
+    }
+
+    const meetingId = Number(requested.id);
+    if (!Number.isInteger(meetingId) || meetingId <= 0) {
+      throw new ValidationError('선택한 회의 범위가 올바르지 않습니다.');
+    }
+
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: {
+        id: true,
+        title: true,
+        authorId: true,
+        projectId: true,
+        attendees: { select: { memberId: true } },
+      },
+    });
+
+    if (!meeting) {
+      throw new ValidationError('선택한 회의를 찾을 수 없습니다.');
+    }
+
+    const project = meeting.projectId
+      ? await this.prisma.project.findUnique({
+          where: { id: meeting.projectId },
+          select: {
+            ownerId: true,
+            members: { select: { memberId: true } },
+          },
+        })
+      : null;
+
+    const canRead = isAdmin
+      || meeting.authorId === member.id
+      || meeting.attendees.some((item) => item.memberId === member.id)
+      || project?.ownerId === member.id
+      || Boolean(project?.members.some((item) => item.memberId === member.id));
+
+    if (!canRead) {
+      throw new ForbiddenError('선택한 회의를 조회할 권한이 없습니다.');
+    }
+
+    return {
+      type: 'MEETING',
+      id: String(meeting.id),
+      label: meeting.title,
+      projectId: meeting.projectId || undefined,
+      meetingId: meeting.id,
+    };
+  }
+
+  private async collectContext(member: MemberContext, scope: AiAssistantScope) {
     const now = new Date();
     const inThirtyDays = new Date(now);
     inThirtyDays.setDate(now.getDate() + 30);
+
+    const taskWhere: Prisma.TaskWhereInput = scope.projectId
+      ? { status: { not: 'DONE' }, projectId: scope.projectId }
+      : {
+          status: { not: 'DONE' },
+          OR: [
+            { assigneeId: member.id },
+            { reporterId: member.id },
+          ],
+        };
+
+    const meetingWhere: Prisma.MeetingWhereInput = scope.meetingId
+      ? { id: scope.meetingId }
+      : scope.projectId
+        ? { projectId: scope.projectId }
+        : {
+            meetingDate: { gte: now, lte: inThirtyDays },
+            OR: [
+              { authorId: member.id },
+              { attendees: { some: { memberId: member.id } } },
+            ],
+          };
+
+    const projectWhere: Prisma.ProjectWhereInput = scope.projectId
+      ? { id: scope.projectId }
+      : {
+          status: 'ACTIVE',
+          OR: [
+            { ownerId: member.id },
+            { members: { some: { memberId: member.id } } },
+          ],
+        };
 
     const [memberRecord, tasks, meetings, projects] = await Promise.all([
       this.prisma.member.findUnique({
@@ -77,13 +234,7 @@ export class AiAssistantService {
         select: { id: true, name: true, department: true, position: true },
       }),
       this.prisma.task.findMany({
-        where: {
-          status: { not: 'DONE' },
-          OR: [
-            { assigneeId: member.id },
-            { reporterId: member.id },
-          ],
-        },
+        where: taskWhere,
         include: {
           project: { select: { id: true, name: true } },
           assignee: { select: { id: true, name: true } },
@@ -92,13 +243,7 @@ export class AiAssistantService {
         take: 30,
       }),
       this.prisma.meeting.findMany({
-        where: {
-          meetingDate: { gte: now, lte: inThirtyDays },
-          OR: [
-            { authorId: member.id },
-            { attendees: { some: { memberId: member.id } } },
-          ],
-        },
+        where: meetingWhere,
         select: {
           id: true,
           title: true,
@@ -106,18 +251,22 @@ export class AiAssistantService {
           location: true,
           summary: true,
           projectId: true,
+          actionItems: {
+            select: {
+              title: true,
+              status: true,
+              priority: true,
+              dueDate: true,
+            },
+            take: 10,
+            orderBy: { createdAt: 'asc' },
+          },
         },
         orderBy: { meetingDate: 'asc' },
         take: 15,
       }),
       this.prisma.project.findMany({
-        where: {
-          status: 'ACTIVE',
-          OR: [
-            { ownerId: member.id },
-            { members: { some: { memberId: member.id } } },
-          ],
-        },
+        where: projectWhere,
         select: {
           id: true,
           name: true,
@@ -130,7 +279,7 @@ export class AiAssistantService {
       }),
     ]);
 
-    return { member: memberRecord, tasks, meetings, projects };
+    return { member: memberRecord, tasks, meetings, projects, scope };
   }
 
   private toContextText(context: Awaited<ReturnType<AiAssistantService['collectContext']>>) {
@@ -143,12 +292,19 @@ export class AiAssistantService {
       task.assignee?.name ? `담당 ${task.assignee.name}` : null,
     ].filter(Boolean).join(' / '));
 
-    const meetingLines = context.meetings.map((meeting) => [
-      `- ${meeting.title}`,
-      meeting.meetingDate.toISOString().slice(0, 16),
-      meeting.location ? `장소 ${meeting.location}` : null,
-      meeting.summary ? `요약 ${meeting.summary}` : null,
-    ].filter(Boolean).join(' / '));
+    const meetingLines = context.meetings.map((meeting) => {
+      const actionItems = meeting.actionItems.length
+        ? `할 일 ${meeting.actionItems.map((item) => `${item.title}(${item.status})`).join(', ')}`
+        : null;
+
+      return [
+        `- ${meeting.title}`,
+        meeting.meetingDate.toISOString().slice(0, 16),
+        meeting.location ? `장소 ${meeting.location}` : null,
+        meeting.summary ? `요약 ${meeting.summary}` : null,
+        actionItems,
+      ].filter(Boolean).join(' / ');
+    });
 
     const projectLines = context.projects.map((project) => [
       `- ${project.name}`,
@@ -157,6 +313,7 @@ export class AiAssistantService {
     ].filter(Boolean).join(' / '));
 
     return [
+      `조회 범위: ${context.scope.label} (${context.scope.type})`,
       `사용자: ${context.member?.name || '알 수 없음'} (${context.member?.department || '부서 없음'} ${context.member?.position || ''})`,
       '미완료 업무:',
       taskLines.length ? taskLines.join('\n') : '- 없음',
@@ -186,6 +343,11 @@ export class AiAssistantService {
 
     return {
       answer,
+      scope: {
+        type: context.scope.type,
+        id: context.scope.id,
+        label: context.scope.label,
+      },
       highlights,
       suggestedQuestions: [
         '이번 주 지연 위험 업무를 정리해줘',
@@ -228,6 +390,11 @@ export class AiAssistantService {
     return {
       id: run.id,
       runId: run.id,
+      scope: {
+        type: ['PROJECT', 'MEETING'].includes((run as any).scopeType) ? (run as any).scopeType : 'GLOBAL',
+        id: (run as any).scopeId || undefined,
+        label: (run as any).scopeLabel || '전체',
+      },
       prompt: run.prompt,
       answer: run.answer,
       highlights: Array.isArray(run.highlights) ? run.highlights.map(String).filter(Boolean) : [],
@@ -241,20 +408,67 @@ export class AiAssistantService {
       status: run.status === 'FAILED' ? 'FAILED' : 'COMPLETED',
       errorMessage: run.errorMessage,
       createdAt: run.createdAt.toISOString(),
+      usage: {
+        model: (run as any).model,
+        inputTokens: (run as any).inputTokens,
+        outputTokens: (run as any).outputTokens,
+        totalTokens: (run as any).totalTokens,
+        cachedTokens: (run as any).cachedTokens,
+        reasoningTokens: (run as any).reasoningTokens,
+        estimatedCostUsd: (run as any).estimatedCostUsd,
+      },
     };
   }
 
-  private async recordRun(member: MemberContext, prompt: string, result: AiAssistantResult) {
+  private estimateCostUsd(usage: AiAssistantUsageLog) {
+    const inputRate = Number(process.env.OPENAI_ASSISTANT_INPUT_COST_PER_1M || 0);
+    const outputRate = Number(process.env.OPENAI_ASSISTANT_OUTPUT_COST_PER_1M || 0);
+    const inputTokens = Number(usage.inputTokens || 0);
+    const outputTokens = Number(usage.outputTokens || 0);
+
+    if (!inputRate && !outputRate) return null;
+
+    return Number((((inputTokens / 1_000_000) * inputRate) + ((outputTokens / 1_000_000) * outputRate)).toFixed(6));
+  }
+
+  private extractUsage(response: { model?: string | null; usage?: any }, model: string): AiAssistantUsageLog {
+    const usage = response.usage;
+    const result: AiAssistantUsageLog = {
+      model: response.model || model,
+      inputTokens: usage?.input_tokens ?? null,
+      outputTokens: usage?.output_tokens ?? null,
+      totalTokens: usage?.total_tokens ?? null,
+      cachedTokens: usage?.input_tokens_details?.cached_tokens ?? null,
+      reasoningTokens: usage?.output_tokens_details?.reasoning_tokens ?? null,
+    };
+
+    return {
+      ...result,
+      estimatedCostUsd: this.estimateCostUsd(result),
+    };
+  }
+
+  private async recordRun(member: MemberContext, prompt: string, scope: AiAssistantScope, result: AiAssistantResult, usage: AiAssistantUsageLog = {}) {
     const run = await this.prisma.aiAssistantRun.create({
       data: {
         memberId: member.id,
         prompt,
+        scopeType: scope.type,
+        scopeId: scope.id,
+        scopeLabel: scope.label,
         answer: result.answer,
         highlights: result.highlights,
         suggestedQuestions: result.suggestedQuestions,
         kakaoBrief: result.kakaoBrief,
         sourceCounts: result.sourceCounts,
         mode: result.mode,
+        model: usage.model,
+        inputTokens: usage.inputTokens ?? undefined,
+        outputTokens: usage.outputTokens ?? undefined,
+        totalTokens: usage.totalTokens ?? undefined,
+        cachedTokens: usage.cachedTokens ?? undefined,
+        reasoningTokens: usage.reasoningTokens ?? undefined,
+        estimatedCostUsd: usage.estimatedCostUsd ?? undefined,
         status: 'COMPLETED',
       },
     });
@@ -263,20 +477,31 @@ export class AiAssistantService {
       ...result,
       runId: run.id,
       generatedAt: run.createdAt.toISOString(),
+      usage,
     };
   }
 
-  private async recordFailure(member: MemberContext, prompt: string, error: unknown, sourceCounts: AiAssistantResult['sourceCounts']) {
+  private async recordFailure(member: MemberContext, prompt: string, scope: AiAssistantScope, error: unknown, sourceCounts: AiAssistantResult['sourceCounts'], usage: AiAssistantUsageLog = {}) {
     await this.prisma.aiAssistantRun.create({
       data: {
         memberId: member.id,
         prompt,
+        scopeType: scope.type,
+        scopeId: scope.id,
+        scopeLabel: scope.label,
         answer: '',
         highlights: [],
         suggestedQuestions: [],
         kakaoBrief: '',
         sourceCounts,
         mode: process.env.OPENAI_API_KEY ? 'openai' : 'local',
+        model: usage.model,
+        inputTokens: usage.inputTokens ?? undefined,
+        outputTokens: usage.outputTokens ?? undefined,
+        totalTokens: usage.totalTokens ?? undefined,
+        cachedTokens: usage.cachedTokens ?? undefined,
+        reasoningTokens: usage.reasoningTokens ?? undefined,
+        estimatedCostUsd: usage.estimatedCostUsd ?? undefined,
         status: 'FAILED',
         errorMessage: error instanceof Error ? error.message : 'AI Assistant 요청 처리에 실패했습니다.',
       },
@@ -296,7 +521,8 @@ export class AiAssistantService {
 
   async ask(member: MemberContext, input: AskAiAssistantInput): Promise<AiAssistantResult> {
     const prompt = this.sanitizePrompt(input.prompt);
-    const context = await this.collectContext(member);
+    const scope = await this.resolveScope(member, input.scope);
+    const context = await this.collectContext(member, scope);
     const sourceCounts = {
       tasks: context.tasks.length,
       meetings: context.meetings.length,
@@ -305,13 +531,14 @@ export class AiAssistantService {
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return this.recordRun(member, prompt, this.buildLocalAnswer(prompt, context));
+      return this.recordRun(member, prompt, scope, this.buildLocalAnswer(prompt, context), { model: 'local' });
     }
 
     try {
       const openai = new OpenAI({ apiKey });
+      const model = process.env.OPENAI_ASSISTANT_MODEL || process.env.OPENAI_MEETING_MODEL || 'gpt-4o-mini';
       const response = await openai.responses.create({
-        model: process.env.OPENAI_ASSISTANT_MODEL || process.env.OPENAI_MEETING_MODEL || 'gpt-4o-mini',
+        model,
         input: [
           {
             role: 'system',
@@ -327,6 +554,7 @@ export class AiAssistantService {
             role: 'user',
             content: [
               `사용자 질문: ${prompt}`,
+              `조회 범위: ${scope.label} (${scope.type})`,
               '',
               '현재 INTRUTH 컨텍스트:',
               this.toContextText(context),
@@ -344,7 +572,13 @@ export class AiAssistantService {
       });
 
       const parsed = JSON.parse(response.output_text || '{}') as Partial<AiAssistantResult>;
-      return this.recordRun(member, prompt, {
+      const usage = this.extractUsage(response, model);
+      return this.recordRun(member, prompt, scope, {
+        scope: {
+          type: scope.type,
+          id: scope.id,
+          label: scope.label,
+        },
         answer: String(parsed.answer || '').trim(),
         highlights: Array.isArray(parsed.highlights) ? parsed.highlights.map(String).filter(Boolean).slice(0, 5) : [],
         suggestedQuestions: Array.isArray(parsed.suggestedQuestions)
@@ -354,9 +588,9 @@ export class AiAssistantService {
         sourceCounts,
         generatedAt: new Date().toISOString(),
         mode: 'openai',
-      });
+      }, usage);
     } catch (error) {
-      await this.recordFailure(member, prompt, error, sourceCounts);
+      await this.recordFailure(member, prompt, scope, error, sourceCounts);
       throw error;
     }
   }
