@@ -11,7 +11,7 @@ model Role {
   id          String   @id @default(uuid())
   name        String   @unique
   description String?
-  permissions String   // JSON 문자열로 저장
+  permissions String // JSON 문자열로 저장
   isSystem    Boolean  @default(false) @map("is_system")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -36,14 +36,16 @@ model Member {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  role              Role              @relation(fields: [roleId], references: [id])
-  ownedProjects     Project[]         @relation("ProjectOwner")
-  projectMemberships ProjectMember[]
-  assignedTasks     Task[]            @relation("TaskAssignee")
-  reportedTasks     Task[]            @relation("TaskReporter")
-  comments          Comment[]
-  activityLogs      ActivityLog[]
-  assistantRuns     AiAssistantRun[]
+  role                 Role             @relation(fields: [roleId], references: [id])
+  ownedProjects        Project[]        @relation("ProjectOwner")
+  projectMemberships   ProjectMember[]
+  assignedTasks        Task[]           @relation("TaskAssignee")
+  reportedTasks        Task[]           @relation("TaskReporter")
+  comments             Comment[]
+  activityLogs         ActivityLog[]
+  assistantRuns        AiAssistantRun[]
+  agentActions         AiAgentAction[]  @relation("AiAgentActionOwner")
+  reviewedAgentActions AiAgentAction[]  @relation("AiAgentActionReviewer")
 
   // Cell 관련 관계
   ledCells           Cell[]       @relation("CellLeader")
@@ -55,20 +57,20 @@ model Member {
 }
 
 model Project {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   name        String
   description String?
-  status      String   @default("ACTIVE") // ACTIVE, COMPLETED, ARCHIVED
+  status      String    @default("ACTIVE") // ACTIVE, COMPLETED, ARCHIVED
   startDate   DateTime? @map("start_date")
   endDate     DateTime? @map("end_date")
-  ownerId     String   @map("owner_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  ownerId     String    @map("owner_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  owner    Member          @relation("ProjectOwner", fields: [ownerId], references: [id])
-  members  ProjectMember[]
-  tasks    Task[]
-  labels   TaskLabel[]
+  owner   Member          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  members ProjectMember[]
+  tasks   Task[]
+  labels  TaskLabel[]
 
   @@map("projects")
 }
@@ -106,15 +108,15 @@ model Task {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  project            Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee           Member?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  reporter           Member?       @relation("TaskReporter", fields: [reporterId], references: [id])
-  parent             Task?         @relation("TaskSubtasks", fields: [parentId], references: [id])
-  subtasks           Task[]        @relation("TaskSubtasks")
-  labels             TaskLabelRelation[]
-  comments           Comment[]
-  activityLogs       ActivityLog[]
-  meetingActionItem  MeetingActionItem?
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee          Member?             @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  reporter          Member?             @relation("TaskReporter", fields: [reporterId], references: [id])
+  parent            Task?               @relation("TaskSubtasks", fields: [parentId], references: [id])
+  subtasks          Task[]              @relation("TaskSubtasks")
+  labels            TaskLabelRelation[]
+  comments          Comment[]
+  activityLogs      ActivityLog[]
+  meetingActionItem MeetingActionItem?
 
   @@map("tasks")
 }
@@ -161,7 +163,7 @@ model ActivityLog {
   taskId    String   @map("task_id")
   memberId  String   @map("member_id")
   action    String
-  details   String?  // JSON 문자열로 저장
+  details   String? // JSON 문자열로 저장
   createdAt DateTime @default(now()) @map("created_at")
 
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -186,12 +188,12 @@ model Meeting {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  attendees   MeetingAttendee[]
-  attachments MeetingAttachment[]
-  comments    MeetingComment[]
-  agendas     MeetingAgenda[]
-  actionItems MeetingActionItem[]
-  recordings  MeetingRecording[]
+  attendees      MeetingAttendee[]
+  attachments    MeetingAttachment[]
+  comments       MeetingComment[]
+  agendas        MeetingAgenda[]
+  actionItems    MeetingActionItem[]
+  recordings     MeetingRecording[]
   materialDrafts MeetingMaterialDraft[]
 
   @@map("wf_meetings")
@@ -245,8 +247,8 @@ model MeetingAgenda {
   order       Int      @default(0)
   title       String
   description String?
-  duration    Int?     // 예상 소요 시간 (분)
-  presenter   String?  // 발표자/담당자 이름
+  duration    Int? // 예상 소요 시간 (분)
+  presenter   String? // 발표자/담당자 이름
   status      String   @default("PENDING") // PENDING, DISCUSSED, SKIPPED
   createdAt   DateTime @default(now()) @map("created_at")
 
@@ -263,7 +265,7 @@ model MeetingActionItem {
   assigneeId  String?   @map("assignee_id")
   dueDate     DateTime? @map("due_date")
   priority    String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
-  status      String    @default("TODO")   // TODO, IN_PROGRESS, DONE
+  status      String    @default("TODO") // TODO, IN_PROGRESS, DONE
   taskId      String?   @unique @map("task_id")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
@@ -362,10 +364,38 @@ model AiAssistantRun {
   errorMessage       String?  @map("error_message")
   createdAt          DateTime @default(now()) @map("created_at")
 
-  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member       Member          @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  agentActions AiAgentAction[]
 
   @@index([memberId, createdAt])
   @@map("wf_ai_assistant_runs")
+}
+
+model AiAgentAction {
+  id             Int       @id @default(autoincrement())
+  assistantRunId Int?      @map("assistant_run_id")
+  memberId       String    @map("member_id")
+  actionType     String    @map("action_type")
+  status         String    @default("PENDING_APPROVAL")
+  scopeType      String    @default("GLOBAL") @map("scope_type")
+  scopeId        String?   @map("scope_id")
+  scopeLabel     String?   @map("scope_label")
+  preview        Json
+  result         Json?
+  errorMessage   String?   @map("error_message")
+  reviewedById   String?   @map("reviewed_by_id")
+  reviewedAt     DateTime? @map("reviewed_at")
+  executedAt     DateTime? @map("executed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  assistantRun AiAssistantRun? @relation(fields: [assistantRunId], references: [id], onDelete: SetNull)
+  member       Member          @relation("AiAgentActionOwner", fields: [memberId], references: [id], onDelete: Cascade)
+  reviewedBy   Member?         @relation("AiAgentActionReviewer", fields: [reviewedById], references: [id])
+
+  @@index([memberId, status, createdAt])
+  @@index([assistantRunId])
+  @@map("wf_ai_agent_actions")
 }
 
 // ==================== 셀 그룹 출석 관리 모델 ====================
@@ -388,13 +418,13 @@ model Cell {
 }
 
 model CellMember {
-  id        String    @id @default(uuid())
-  cellId    String    @map("cell_id")
-  memberId  String    @map("member_id")
-  role      String    @default("MEMBER") // LEADER, SUB_LEADER, MEMBER
-  joinedAt  DateTime  @default(now()) @map("joined_at")
-  leftAt    DateTime? @map("left_at")
-  isActive  Boolean   @default(true) @map("is_active")
+  id       String    @id @default(uuid())
+  cellId   String    @map("cell_id")
+  memberId String    @map("member_id")
+  role     String    @default("MEMBER") // LEADER, SUB_LEADER, MEMBER
+  joinedAt DateTime  @default(now()) @map("joined_at")
+  leftAt   DateTime? @map("left_at")
+  isActive Boolean   @default(true) @map("is_active")
 
   cell   Cell   @relation(fields: [cellId], references: [id], onDelete: Cascade)
   member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)

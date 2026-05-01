@@ -1,4 +1,11 @@
-import type { AiAssistantHistoryItem, AiAssistantResult, AiAssistantScope } from '@/types';
+import type {
+  AiAgentAction,
+  AiAssistantHistoryItem,
+  AiAssistantResult,
+  AiAssistantScope,
+  ApproveAiAgentActionResult,
+  CreateAiTaskDraftActionResult,
+} from '@/types';
 
 function getBaseUrl() {
   return import.meta.env.VITE_API_BASE_URL || '/api';
@@ -38,6 +45,75 @@ export async function listAiAssistantRuns(limit = 8): Promise<AiAssistantHistory
   const token = getToken();
   const params = new URLSearchParams({ limit: String(limit) });
   const response = await fetch(`${getBaseUrl()}/ai/assistant/runs?${params.toString()}`, {
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function listAiAgentActions(limit = 8): Promise<AiAgentAction[]> {
+  const token = getToken();
+  const params = new URLSearchParams({ limit: String(limit) });
+  const response = await fetch(`${getBaseUrl()}/ai/assistant/actions?${params.toString()}`, {
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function createAiTaskDraftAction(
+  prompt: string,
+  scope?: Pick<AiAssistantScope, 'type' | 'id'>
+): Promise<CreateAiTaskDraftActionResult> {
+  const token = getToken();
+  const response = await fetch(`${getBaseUrl()}/ai/assistant/task-drafts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: JSON.stringify({ prompt, scope }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function approveAiAgentAction(actionId: number): Promise<ApproveAiAgentActionResult> {
+  const token = getToken();
+  const response = await fetch(`${getBaseUrl()}/ai/assistant/actions/${actionId}/approve`, {
+    method: 'POST',
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function rejectAiAgentAction(actionId: number): Promise<AiAgentAction> {
+  const token = getToken();
+  const response = await fetch(`${getBaseUrl()}/ai/assistant/actions/${actionId}/reject`, {
+    method: 'POST',
     headers: {
       ...(token && { Authorization: `Bearer ${token}` }),
     },

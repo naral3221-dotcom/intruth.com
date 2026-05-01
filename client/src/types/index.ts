@@ -501,6 +501,59 @@ export interface AiAssistantHistoryItem extends AiAssistantResult {
   createdAt: string;
 }
 
+export type AiAgentActionStatus = 'PENDING_APPROVAL' | 'EXECUTED' | 'REJECTED' | 'FAILED';
+export type AiAgentActionType = 'CREATE_TASKS';
+
+export interface AiTaskDraft {
+  title: string;
+  description?: string | null;
+  priority: TaskPriority;
+  dueDate?: string | null;
+  assigneeId?: string | null;
+  assigneeName?: string | null;
+}
+
+export interface AiTaskDraftPreview {
+  type: AiAgentActionType;
+  prompt: string;
+  brief: string;
+  projectId: string;
+  projectName: string;
+  tasks: AiTaskDraft[];
+  sourceRunId?: number;
+  generatedAt: string;
+}
+
+export interface AiAgentAction {
+  id: number;
+  assistantRunId?: number | null;
+  actionType: AiAgentActionType;
+  status: AiAgentActionStatus;
+  scope: AiAssistantScope;
+  preview: AiTaskDraftPreview;
+  result?: {
+    createdCount?: number;
+    tasks?: Array<{ id: string; title: string; projectId: string }>;
+  } | null;
+  errorMessage?: string | null;
+  reviewedById?: string | null;
+  reviewedAt?: string | null;
+  executedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAiTaskDraftActionResult {
+  assistant: AiAssistantResult;
+  action: AiAgentAction;
+}
+
+export interface ApproveAiAgentActionResult {
+  action: AiAgentAction;
+  tasks: Task[];
+  createdCount: number;
+}
+
 export interface MeetingComment {
   id: number;
   meetingId: number;

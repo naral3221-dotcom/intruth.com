@@ -246,4 +246,66 @@ router.get('/assistant/runs', authenticate, async (req: AuthRequest, res: Respon
   }
 });
 
+router.get('/assistant/actions', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiAssistantService();
+    const actions = await service.listAgentActions(memberContext(req), req.query.limit ? Number(req.query.limit) : undefined);
+    res.json(actions);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.post(
+  '/assistant/task-drafts',
+  authenticate,
+  checkPermission('task.create'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const service = getAiAssistantService();
+      const result = await service.createTaskDraftAction(memberContext(req), {
+        prompt: String(req.body?.prompt || ''),
+        scope: req.body?.scope
+          ? {
+            type: req.body.scope.type,
+            id: req.body.scope.id,
+          }
+          : undefined,
+      });
+      res.status(201).json(result);
+    } catch (error) {
+      const { statusCode, body } = handleError(error);
+      res.status(statusCode).json(body);
+    }
+  }
+);
+
+router.post(
+  '/assistant/actions/:actionId/approve',
+  authenticate,
+  checkPermission('task.create'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const service = getAiAssistantService();
+      const result = await service.approveAgentAction(Number(req.params.actionId), memberContext(req));
+      res.status(201).json(result);
+    } catch (error) {
+      const { statusCode, body } = handleError(error);
+      res.status(statusCode).json(body);
+    }
+  }
+);
+
+router.post('/assistant/actions/:actionId/reject', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiAssistantService();
+    const action = await service.rejectAgentAction(Number(req.params.actionId), memberContext(req));
+    res.json(action);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
 export default router;

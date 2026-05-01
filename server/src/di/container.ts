@@ -97,7 +97,7 @@ class Container {
     const aiTranscriptionService = new AiTranscriptionService(prisma, storageService);
     this.instances.set('AiTranscriptionService', aiTranscriptionService);
 
-    const aiAssistantService = new AiAssistantService(prisma);
+    const aiAssistantService = new AiAssistantService(prisma, activityLogService);
     this.instances.set('AiAssistantService', aiAssistantService);
 
     // 6. 셀 출석 관련 서비스

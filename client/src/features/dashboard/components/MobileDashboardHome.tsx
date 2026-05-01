@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type {
   ActivityLog,
+  AiAgentAction,
   AiAssistantHistoryItem,
   AiAssistantResult,
   AiAssistantScopeType,
@@ -28,7 +29,15 @@ import type { ProjectStats } from '../hooks/useDashboard';
 import { cn } from '@/core/utils/cn';
 import { shareKakaoText, type ShareResult } from '@/shared/share/kakaoShare';
 import { createShareUrl } from '@/shared/share/shareConfig';
-import { askAiAssistant, listAiAssistantRuns } from '@/shared/ai/assistantApi';
+import {
+  approveAiAgentAction,
+  askAiAssistant,
+  createAiTaskDraftAction,
+  listAiAgentActions,
+  listAiAssistantRuns,
+  rejectAiAgentAction,
+} from '@/shared/ai/assistantApi';
+import { useTaskStore } from '@/stores/taskStore';
 import { toast } from '@/stores/toastStore';
 
 interface MobileDashboardHomeProps {
@@ -189,6 +198,88 @@ function MeetingRow({ meeting }: { meeting: Meeting }) {
   );
 }
 
+function priorityLabel(priority: Task['priority']) {
+  const labels = {
+    LOW: '낮음',
+    MEDIUM: '보통',
+    HIGH: '높음',
+    URGENT: '긴급',
+  };
+  return labels[priority] || priority;
+}
+
+function AiTaskDraftActionBlock({
+  action,
+  busy,
+  onApprove,
+  onReject,
+}: {
+  action: AiAgentAction;
+  busy: boolean;
+  onApprove: (actionId: number) => void;
+  onReject: (actionId: number) => void;
+}) {
+  const { preview } = action;
+  const isPending = action.status === 'PENDING_APPROVAL';
+
+  return (
+    <div className="space-y-3 border-t border-border pt-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-primary">승인 대기 업무 초안</p>
+          <h3 className="mt-1 text-sm font-bold text-foreground">
+            {preview.projectName} · {preview.tasks.length}개
+          </h3>
+          {preview.brief && (
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{preview.brief}</p>
+          )}
+        </div>
+        <span className={cn(
+          'shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold',
+          isPending ? 'bg-amber-50 text-amber-700' : 'bg-muted text-muted-foreground'
+        )}>
+          {isPending ? '확인 필요' : action.status}
+        </span>
+      </div>
+
+      <div className="divide-y divide-border rounded-lg border border-border">
+        {preview.tasks.map((task, index) => (
+          <div key={`${task.title}-${index}`} className="space-y-1 px-3 py-2">
+            <p className="line-clamp-2 text-sm font-semibold text-foreground">{task.title}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {priorityLabel(task.priority)}
+              {task.dueDate ? ` · ${formatShortDate(task.dueDate)}` : ''}
+              {task.assigneeName ? ` · ${task.assigneeName}` : ''}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {isPending && (
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => onReject(action.id)}
+            disabled={busy}
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border text-sm font-semibold text-foreground disabled:opacity-60"
+          >
+            거절
+          </button>
+          <button
+            type="button"
+            onClick={() => onApprove(action.id)}
+            disabled={busy}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            업무 만들기
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MobileDashboardHome({
   memberName,
   stats,
@@ -209,6 +300,10 @@ export function MobileDashboardHome({
   const [assistantHistoryLoading, setAssistantHistoryLoading] = useState(false);
   const [assistantScopeKey, setAssistantScopeKey] = useState(scopeKey('GLOBAL'));
   const [sharingAssistant, setSharingAssistant] = useState(false);
+  const [assistantActions, setAssistantActions] = useState<AiAgentAction[]>([]);
+  const [assistantActionsLoading, setAssistantActionsLoading] = useState(false);
+  const [draftingTasks, setDraftingTasks] = useState(false);
+  const [reviewingActionId, setReviewingActionId] = useState<number | null>(null);
 
   const focusTasks = useMemo(() => {
     const today = startOfToday();
@@ -348,6 +443,18 @@ export function MobileDashboardHome({
     }
   };
 
+  const loadAssistantActions = async () => {
+    setAssistantActionsLoading(true);
+    try {
+      const actions = await listAiAgentActions(8);
+      setAssistantActions(actions);
+    } catch (error) {
+      toast.error('AI 승인 대기 목록을 불러오지 못했습니다.', (error as Error).message);
+    } finally {
+      setAssistantActionsLoading(false);
+    }
+  };
+
   const handleAskAssistant = async (prompt = assistantPrompt) => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
@@ -374,6 +481,9 @@ export function MobileDashboardHome({
     if (assistantHistory.length === 0 && !assistantHistoryLoading) {
       void loadAssistantHistory();
     }
+    if (assistantActions.length === 0 && !assistantActionsLoading) {
+      void loadAssistantActions();
+    }
   };
 
   const handleSelectAssistantHistory = (item: AiAssistantHistoryItem) => {
@@ -384,6 +494,75 @@ export function MobileDashboardHome({
     }
     if (item.status === 'COMPLETED') {
       setAssistantResult(item);
+    }
+  };
+
+  const handleCreateTaskDraft = async () => {
+    const trimmed = assistantPrompt.trim();
+    if (!trimmed) return;
+
+    if (selectedAssistantScope.type === 'GLOBAL') {
+      toast.warning('업무 초안에는 프로젝트 범위가 필요합니다.', '조회 범위에서 프로젝트나 프로젝트가 연결된 회의를 선택해주세요.');
+      return;
+    }
+
+    setAssistantOpen(true);
+    setDraftingTasks(true);
+    try {
+      const result = await createAiTaskDraftAction(trimmed, {
+        type: selectedAssistantScope.type,
+        id: selectedAssistantScope.id,
+      });
+      setAssistantResult(result.assistant);
+      setAssistantActions((actions) => [
+        result.action,
+        ...actions.filter((action) => action.id !== result.action.id),
+      ].slice(0, 8));
+      toast.success('업무 초안 생성 완료', `${result.action.preview.tasks.length}개 업무를 승인 카드로 만들었습니다.`);
+      void loadAssistantHistory();
+    } catch (error) {
+      toast.error('업무 초안을 만들지 못했습니다.', (error as Error).message);
+    } finally {
+      setDraftingTasks(false);
+    }
+  };
+
+  const handleApproveAction = async (actionId: number) => {
+    setReviewingActionId(actionId);
+    try {
+      const result = await approveAiAgentAction(actionId);
+      setAssistantActions((actions) => actions.map((action) => (
+        action.id === actionId ? result.action : action
+      )));
+
+      const taskStore = useTaskStore.getState();
+      const existingIds = new Set(taskStore.tasks.map((task) => task.id));
+      taskStore.setTasks([
+        ...taskStore.tasks,
+        ...result.tasks.filter((task) => !existingIds.has(task.id)),
+      ]);
+
+      toast.success('AI 업무 생성 완료', `${result.createdCount}개 업무가 생성되었습니다.`);
+    } catch (error) {
+      toast.error('AI 업무 생성에 실패했습니다.', (error as Error).message);
+      void loadAssistantActions();
+    } finally {
+      setReviewingActionId(null);
+    }
+  };
+
+  const handleRejectAction = async (actionId: number) => {
+    setReviewingActionId(actionId);
+    try {
+      const action = await rejectAiAgentAction(actionId);
+      setAssistantActions((actions) => actions.map((item) => (
+        item.id === actionId ? action : item
+      )));
+      toast.info('AI 업무 초안을 보류했습니다.');
+    } catch (error) {
+      toast.error('AI 업무 초안 거절에 실패했습니다.', (error as Error).message);
+    } finally {
+      setReviewingActionId(null);
     }
   };
 
@@ -405,6 +584,15 @@ export function MobileDashboardHome({
       setSharingAssistant(false);
     }
   };
+
+  const visibleAssistantActions = assistantActions
+    .filter((action) => action.actionType === 'CREATE_TASKS')
+    .sort((a, b) => {
+      if (a.status === 'PENDING_APPROVAL' && b.status !== 'PENDING_APPROVAL') return -1;
+      if (a.status !== 'PENDING_APPROVAL' && b.status === 'PENDING_APPROVAL') return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    })
+    .slice(0, 3);
 
   return (
     <div className="space-y-5">
@@ -493,6 +681,15 @@ export function MobileDashboardHome({
                 {assistantLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : '확인'}
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => void handleCreateTaskDraft()}
+              disabled={draftingTasks || !assistantPrompt.trim() || selectedAssistantScope.type === 'GLOBAL'}
+              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 text-sm font-semibold text-primary disabled:opacity-50"
+            >
+              {draftingTasks ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
+              업무 초안 만들기
+            </button>
           </form>
 
           <div className="flex flex-wrap gap-2">
@@ -507,6 +704,31 @@ export function MobileDashboardHome({
               </button>
             ))}
           </div>
+
+          {(visibleAssistantActions.length > 0 || assistantActionsLoading) && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground">승인 대기</p>
+                <button
+                  type="button"
+                  onClick={() => void loadAssistantActions()}
+                  disabled={assistantActionsLoading}
+                  className="inline-flex min-h-8 items-center justify-center rounded-lg px-2 text-xs font-semibold text-primary disabled:opacity-60"
+                >
+                  {assistantActionsLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : '새로고침'}
+                </button>
+              </div>
+              {visibleAssistantActions.map((action) => (
+                <AiTaskDraftActionBlock
+                  key={action.id}
+                  action={action}
+                  busy={reviewingActionId === action.id}
+                  onApprove={(actionId) => void handleApproveAction(actionId)}
+                  onReject={(actionId) => void handleRejectAction(actionId)}
+                />
+              ))}
+            </div>
+          )}
 
           {(assistantHistory.length > 0 || assistantHistoryLoading) && (
             <div className="space-y-2">
