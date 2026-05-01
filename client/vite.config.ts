@@ -5,10 +5,10 @@ import path from 'path'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiBaseUrl = env.VITE_API_BASE_URL || 'http://127.0.0.1:3002/api'
+  const apiBaseUrl = env.VITE_API_BASE_URL || 'http://127.0.0.1:5070/api'
   const proxyTarget = apiBaseUrl.startsWith('http')
     ? new URL(apiBaseUrl).origin
-    : 'http://127.0.0.1:3002'
+    : 'http://127.0.0.1:5070'
 
   return {
     plugins: [react(), tailwindcss()],
