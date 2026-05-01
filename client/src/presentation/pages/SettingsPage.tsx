@@ -8,7 +8,6 @@ import {
   Download,
   Upload,
   RotateCcw,
-  Mail,
   Clock,
   Camera,
   Bell,
@@ -319,7 +318,7 @@ export function SettingsPage() {
                   </div>
                   <div className="flex-1">
                     <h4 className="text-xl font-bold text-foreground">{profile?.name}</h4>
-                    <p className="text-sm text-muted-foreground mt-1">{profile?.email}</p>
+                    <p className="text-sm text-muted-foreground mt-1">{profile?.username || profile?.email}</p>
                     <div className="flex items-center gap-2 mt-3">
                       <span className="aboard-badge aboard-badge-info">{profile?.department}</span>
                       <span className="aboard-badge aboard-badge-success">{profile?.position}</span>
@@ -359,12 +358,12 @@ export function SettingsPage() {
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3">
                     <div>
-                      <p className="font-medium text-foreground">이메일</p>
-                      <p className="text-xs text-muted-foreground">로그인에 사용되는 이메일</p>
+                      <p className="font-medium text-foreground">아이디</p>
+                      <p className="text-xs text-muted-foreground">로그인에 사용하는 아이디</p>
                     </div>
                     <div className="flex items-center gap-2 text-muted-foreground">
-                      <Mail className="w-4 h-4" />
-                      <span>{profile?.email}</span>
+                      <User className="w-4 h-4" />
+                      <span>{profile?.username || profile?.email}</span>
                     </div>
                   </div>
                 </div>

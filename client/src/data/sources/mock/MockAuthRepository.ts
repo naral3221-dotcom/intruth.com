@@ -12,10 +12,10 @@ import type {
 } from '@/domain/repositories/IAuthRepository';
 import { MockStorage } from './MockStorage';
 
-// Mock 사용자 데이터 (이메일로 조회)
+// Mock 사용자 데이터 (아이디로 조회)
 const mockUsers: Record<string, { password: string; user: AuthUser }> = {
-  'admin@example.com': {
-    password: 'password123',
+  admin: {
+    password: 'admin1234',
     user: {
       id: '1',
       username: 'admin',
@@ -27,7 +27,7 @@ const mockUsers: Record<string, { password: string; user: AuthUser }> = {
       mustChangePassword: false,
     },
   },
-  'hong@example.com': {
+  hong: {
     password: 'password123',
     user: {
       id: '2',
@@ -80,7 +80,7 @@ export class MockAuthRepository implements IAuthRepository {
   async login(input: LoginInput): Promise<LoginResult> {
     await this.storage.delay(500);
 
-    const userData = mockUsers[input.email.toLowerCase()];
+    const userData = mockUsers[input.username.toLowerCase().trim()];
     if (userData && userData.password === input.password) {
       const token = 'mock-jwt-token-' + Date.now();
       this.tokenManager.setToken(token);

@@ -54,14 +54,19 @@ async function main() {
   });
 
   // 테스트 사용자 생성
+  const hashedAdminPassword = await bcrypt.hash('admin1234', 10);
   const hashedPassword = await bcrypt.hash('password123', 10);
 
   const admin = await prisma.member.upsert({
     where: { email: 'admin@example.com' },
-    update: {},
+    update: {
+      username: 'admin',
+      password: hashedAdminPassword,
+    },
     create: {
+      username: 'admin',
       email: 'admin@example.com',
-      password: hashedPassword,
+      password: hashedAdminPassword,
       name: '관리자',
       roleId: adminRole.id,
       department: '개발팀',
@@ -71,8 +76,12 @@ async function main() {
 
   const member1 = await prisma.member.upsert({
     where: { email: 'hong@example.com' },
-    update: {},
+    update: {
+      username: 'hong',
+      password: hashedPassword,
+    },
     create: {
+      username: 'hong',
       email: 'hong@example.com',
       password: hashedPassword,
       name: '홍길동',
@@ -84,8 +93,12 @@ async function main() {
 
   const member2 = await prisma.member.upsert({
     where: { email: 'kim@example.com' },
-    update: {},
+    update: {
+      username: 'kim',
+      password: hashedPassword,
+    },
     create: {
+      username: 'kim',
       email: 'kim@example.com',
       password: hashedPassword,
       name: '김철수',
@@ -97,8 +110,12 @@ async function main() {
 
   const member3 = await prisma.member.upsert({
     where: { email: 'lee@example.com' },
-    update: {},
+    update: {
+      username: 'lee',
+      password: hashedPassword,
+    },
     create: {
+      username: 'lee',
       email: 'lee@example.com',
       password: hashedPassword,
       name: '이영희',
@@ -182,10 +199,10 @@ async function main() {
 
   console.log('✅ Seed completed!');
   console.log('📧 Test accounts:');
-  console.log('   - admin@example.com / password123 (Admin)');
-  console.log('   - hong@example.com / password123 (Member)');
-  console.log('   - kim@example.com / password123 (Member)');
-  console.log('   - lee@example.com / password123 (Manager)');
+  console.log('   - admin / admin1234 (Admin)');
+  console.log('   - hong / password123 (Member)');
+  console.log('   - kim / password123 (Member)');
+  console.log('   - lee / password123 (Manager)');
 }
 
 main()

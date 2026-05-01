@@ -104,7 +104,7 @@ export function Sidebar() {
               {member?.name || '사용자'}
             </p>
             <p className="text-xs text-gray-500 truncate">
-              {member?.email || ''}
+              {member?.username || member?.email || ''}
             </p>
           </div>
 

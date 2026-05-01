@@ -172,7 +172,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                                             </span>
                                         )}
                                     </div>
-                                    <p className="text-sm text-muted-foreground truncate">{user?.email}</p>
+                                    <p className="text-sm text-muted-foreground truncate">{user?.username || user?.email}</p>
                                 </div>
                             </div>
                             <button

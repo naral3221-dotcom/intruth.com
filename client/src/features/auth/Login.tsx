@@ -7,7 +7,7 @@ export function Login() {
   const navigate = useNavigate();
   const { login } = useAuthStore();
   const authRepository = useAuthRepository();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ export function Login() {
 
     try {
       const { token, user, mustChangePassword } = await authRepository.login({
-        email,
+        username,
         password,
       });
       login(token, user, mustChangePassword);
@@ -53,17 +53,18 @@ export function Login() {
           )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              이메일
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+              아이디
             </label>
             <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-gray-900 placeholder-gray-400 focus:border-gray-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-gray-900 transition-all"
-              placeholder="admin@example.com"
-              autoComplete="email"
+              placeholder="admin"
+              autoComplete="username"
+              inputMode="text"
               required
             />
           </div>

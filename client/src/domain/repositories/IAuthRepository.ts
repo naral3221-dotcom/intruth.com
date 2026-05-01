@@ -6,7 +6,7 @@ import type { AuthUser } from '@/types';
 
 // DTO (Data Transfer Objects)
 export interface LoginInput {
-  email: string;
+  username: string;
   password: string;
 }
 

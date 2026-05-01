@@ -176,7 +176,7 @@ export function TopNavigation() {
                                             </div>
                                             <div>
                                                 <p className="text-sm font-medium truncate">{user?.name}</p>
-                                                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                                                <p className="text-xs text-muted-foreground truncate">{user?.username || user?.email}</p>
                                             </div>
                                         </div>
                                         {isAdmin() && (

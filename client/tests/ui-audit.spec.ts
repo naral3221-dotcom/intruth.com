@@ -18,8 +18,8 @@ const ROUTES = [
 
 async function login(page: Page) {
   await page.goto('/login');
-  await page.getByLabel('이메일').fill('admin@example.com');
-  await page.getByLabel('비밀번호').fill('password123');
+  await page.getByLabel('아이디').fill('admin');
+  await page.getByLabel('비밀번호').fill('admin1234');
   await page.getByRole('button', { name: /login|로그인/i }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByText('INTRUTH').first()).toBeVisible();

@@ -23,6 +23,7 @@ interface UseSettingsReturn {
   importSettings: (json: string) => boolean;
   profile: {
     name: string;
+    username?: string;
     email: string;
     avatarUrl?: string;
     department?: string;
@@ -78,6 +79,7 @@ export function useSettings(): UseSettingsReturn {
   const profile = user
     ? {
         name: user.name,
+        username: user.username,
         email: user.email,
         avatarUrl: user.avatarUrl,
         department: user.department,

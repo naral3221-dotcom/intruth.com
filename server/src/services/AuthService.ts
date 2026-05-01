@@ -9,7 +9,7 @@ import { NotFoundError, UnauthorizedError, ValidationError } from '../shared/err
 
 // Input/Output DTOs
 export interface LoginInput {
-  email: string;
+  username: string;
   password: string;
 }
 
@@ -58,21 +58,23 @@ export class AuthService {
    * 로그인
    */
   async login(input: LoginInput): Promise<LoginResult> {
-    if (!input.email?.trim()) {
-      throw new ValidationError('이메일을 입력해주세요.');
+    if (!input.username?.trim()) {
+      throw new ValidationError('아이디를 입력해주세요.');
     }
 
     if (!input.password) {
       throw new ValidationError('비밀번호를 입력해주세요.');
     }
 
+    const username = input.username.toLowerCase().trim();
+
     const member = await this.prisma.member.findUnique({
-      where: { email: input.email.toLowerCase().trim() },
+      where: { username },
       include: { role: true },
     });
 
     if (!member || !member.password) {
-      throw new UnauthorizedError('이메일 또는 비밀번호가 올바르지 않습니다.');
+      throw new UnauthorizedError('아이디 또는 비밀번호가 올바르지 않습니다.');
     }
 
     if (!member.isActive) {
@@ -81,7 +83,7 @@ export class AuthService {
 
     const isValid = await bcrypt.compare(input.password, member.password);
     if (!isValid) {
-      throw new UnauthorizedError('이메일 또는 비밀번호가 올바르지 않습니다.');
+      throw new UnauthorizedError('아이디 또는 비밀번호가 올바르지 않습니다.');
     }
 
     const token = jwt.sign(
@@ -98,7 +100,7 @@ export class AuthService {
       token,
       user: {
         id: member.id,
-        username: member.email.split('@')[0],
+        username: member.username || member.name,
         email: member.email,
         name: member.name,
         avatarUrl: member.avatarUrl,
@@ -125,7 +127,7 @@ export class AuthService {
 
     return {
       id: member.id,
-      username: member.email.split('@')[0],
+      username: member.username || member.name,
       email: member.email,
       name: member.name,
       avatarUrl: member.avatarUrl,

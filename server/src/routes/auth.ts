@@ -8,10 +8,10 @@ const router = Router();
 // 로그인
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password } = req.body;
+    const { username, id, loginId, password } = req.body;
     const authService = getAuthService();
 
-    const result = await authService.login({ email, password });
+    const result = await authService.login({ username: username || id || loginId, password });
     res.json(result);
   } catch (error) {
     const { statusCode, body } = handleError(error);
