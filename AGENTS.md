@@ -109,6 +109,8 @@
 │   └── createRepositories.ts      # Factory 함수
 │
 ├── features/                      # 기능별 모듈
+│   ├── ai-agent/
+│   │   └── AgentCommandCenter.tsx       # 전역 AI 명령형 채팅 패널
 │   ├── dashboard/
 │   │   └── components/
 │   │       └── MobileDashboardHome.tsx      # 모바일 우선 홈 대시보드

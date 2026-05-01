@@ -293,7 +293,7 @@ export function MobileDashboardHome({
 }: MobileDashboardHomeProps) {
   const [sharingBrief, setSharingBrief] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
-  const [assistantPrompt, setAssistantPrompt] = useState('이번 주 우선순위를 정리해줘');
+  const [assistantPrompt, setAssistantPrompt] = useState('무엇을 실행할까요?');
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantResult, setAssistantResult] = useState<AiAssistantResult | null>(null);
   const [assistantHistory, setAssistantHistory] = useState<AiAssistantHistoryItem[]>([]);
@@ -470,7 +470,7 @@ export function MobileDashboardHome({
       setAssistantResult(result);
       void loadAssistantHistory();
     } catch (error) {
-      toast.error('AI 브리핑을 만들지 못했습니다.', (error as Error).message);
+      toast.error('AI 응답을 만들지 못했습니다.', (error as Error).message);
     } finally {
       setAssistantLoading(false);
     }
@@ -572,14 +572,14 @@ export function MobileDashboardHome({
     setSharingAssistant(true);
     try {
       const result = await shareKakaoText({
-        title: 'INTRUTH AI 브리핑',
+        title: 'INTRUTH AI 응답',
         text: assistantResult.kakaoBrief || assistantResult.answer,
         url: createShareUrl('/'),
         buttonTitle: 'INTRUTH 열기',
       });
       notifyShareResult(result);
     } catch {
-      toast.error('AI 브리핑 공유에 실패했습니다.');
+      toast.error('AI 응답 공유에 실패했습니다.');
     } finally {
       setSharingAssistant(false);
     }
@@ -620,7 +620,7 @@ export function MobileDashboardHome({
         <QuickTile icon={MessageCircle} label="회의" tone="text-cyan-700" onClick={onCreateMeeting} />
         <QuickTile icon={ClipboardCheck} label="출석" tone="text-amber-600" to="/attendance/check" />
         <QuickTile icon={FolderPlus} label="프로젝트" tone="text-purple-600" onClick={onCreateProject} />
-        <QuickTile icon={Sparkles} label="AI" tone="text-rose-600" onClick={handleOpenAssistant} />
+        <QuickTile icon={Sparkles} label="AI 명령" tone="text-rose-600" onClick={handleOpenAssistant} />
         <QuickTile icon={Share2} label={sharingBrief ? '공유중' : '브리핑'} tone="text-indigo-600" onClick={() => void handleShareWeeklyBrief()} />
       </section>
 
@@ -629,7 +629,7 @@ export function MobileDashboardHome({
           <div className="flex items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
               <Sparkles className="h-4 w-4 text-rose-600" />
-              AI 브리핑
+              AI 명령
             </h2>
             {assistantResult && (
               <button
@@ -652,7 +652,7 @@ export function MobileDashboardHome({
             }}
           >
             <label className="block text-xs font-semibold text-muted-foreground">
-              조회 범위
+              명령 범위
               <select
                 value={assistantScopeKey}
                 onChange={(event) => setAssistantScopeKey(event.target.value)}
@@ -671,14 +671,14 @@ export function MobileDashboardHome({
                 value={assistantPrompt}
                 onChange={(event) => setAssistantPrompt(event.target.value)}
                 className="aboard-input min-w-0 flex-1"
-                placeholder="무엇을 확인할까요?"
+                placeholder="무엇을 실행할까요?"
               />
               <button
                 type="submit"
                 disabled={assistantLoading || !assistantPrompt.trim()}
                 className="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
               >
-                {assistantLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : '확인'}
+                {assistantLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : '보내기'}
               </button>
             </div>
             <button
@@ -693,7 +693,7 @@ export function MobileDashboardHome({
           </form>
 
           <div className="flex flex-wrap gap-2">
-            {['지연 위험만 알려줘', '다음 회의 준비를 알려줘', '카카오로 보낼 요약을 만들어줘'].map((question) => (
+            {['새 업무 초안 만들어줘', '승인 대기 보여줘', '다음 회의 준비 열어줘'].map((question) => (
               <button
                 key={question}
                 type="button"

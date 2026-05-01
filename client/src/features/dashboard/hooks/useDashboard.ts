@@ -79,7 +79,12 @@ export function useDashboard(): UseDashboardReturn {
 
       setAdditionalData({ teamProgress, activities });
     } catch (err) {
-      console.error('Dashboard fetch error:', err);
+      const isNetworkError = err instanceof Error && 'code' in err && (err as { code?: string }).code === 'NETWORK_ERROR';
+      if (isNetworkError) {
+        console.warn('Dashboard fetch error:', err);
+      } else {
+        console.error('Dashboard fetch error:', err);
+      }
       setError(err instanceof Error ? err : new Error('Failed to fetch dashboard data'));
     } finally {
       setAdditionalLoading(false);

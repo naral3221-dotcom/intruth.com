@@ -42,7 +42,12 @@ export function useCells(): UseCellsReturn {
       setCells(allCells);
       setMyCells(userCells);
     } catch (err) {
-      console.error('Failed to fetch cells:', err);
+      const isNetworkError = err instanceof Error && 'code' in err && (err as { code?: string }).code === 'NETWORK_ERROR';
+      if (isNetworkError) {
+        console.warn('Failed to fetch cells:', err);
+      } else {
+        console.error('Failed to fetch cells:', err);
+      }
       setError(err instanceof Error ? err : new Error('셀 목록을 불러오는데 실패했습니다.'));
     } finally {
       setLoading(false);
@@ -134,7 +139,12 @@ export function useCellDetail(cellId: string | null): UseCellDetailReturn {
       setCell(cellData);
       setMembers(memberData);
     } catch (err) {
-      console.error('Failed to fetch cell detail:', err);
+      const isNetworkError = err instanceof Error && 'code' in err && (err as { code?: string }).code === 'NETWORK_ERROR';
+      if (isNetworkError) {
+        console.warn('Failed to fetch cell detail:', err);
+      } else {
+        console.error('Failed to fetch cell detail:', err);
+      }
       setError(err instanceof Error ? err : new Error('셀 정보를 불러오는데 실패했습니다.'));
     } finally {
       setLoading(false);

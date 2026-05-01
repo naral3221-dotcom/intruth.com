@@ -5,6 +5,7 @@ import { MobileBottomNavigation } from "./MobileBottomNavigation";
 import { QuickAddButton } from "../ui/QuickAddButton";
 import { PwaInstallPrompt } from "../pwa/PwaInstallPrompt";
 import { useEmptyContextMenu } from "../context-menu";
+import { AgentCommandCenter } from "@/features/ai-agent/AgentCommandCenter";
 
 interface AppShellProps {
     children?: ReactNode;
@@ -32,6 +33,7 @@ export function AppShell({ children }: AppShellProps) {
             <MobileBottomNavigation />
 
             {/* Quick Add FAB Button */}
+            <AgentCommandCenter />
             <QuickAddButton />
         </div>
     );

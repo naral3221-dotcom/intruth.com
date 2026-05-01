@@ -20,12 +20,20 @@ async function parseError(response: Response) {
   return data?.error || 'AI 요청 처리에 실패했습니다.';
 }
 
+async function requestAi(path: string, init?: RequestInit) {
+  try {
+    return await fetch(`${getBaseUrl()}${path}`, init);
+  } catch {
+    throw new Error('AI API 서버에 연결할 수 없습니다. 로컬 서버가 켜져 있는지와 VITE_API_BASE_URL 설정을 확인해주세요.');
+  }
+}
+
 export async function askAiAssistant(
   prompt: string,
   scope?: Pick<AiAssistantScope, 'type' | 'id'>
 ): Promise<AiAssistantResult> {
   const token = getToken();
-  const response = await fetch(`${getBaseUrl()}/ai/assistant/ask`, {
+  const response = await requestAi('/ai/assistant/ask', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -44,7 +52,7 @@ export async function askAiAssistant(
 export async function listAiAssistantRuns(limit = 8): Promise<AiAssistantHistoryItem[]> {
   const token = getToken();
   const params = new URLSearchParams({ limit: String(limit) });
-  const response = await fetch(`${getBaseUrl()}/ai/assistant/runs?${params.toString()}`, {
+  const response = await requestAi(`/ai/assistant/runs?${params.toString()}`, {
     headers: {
       ...(token && { Authorization: `Bearer ${token}` }),
     },
@@ -60,7 +68,7 @@ export async function listAiAssistantRuns(limit = 8): Promise<AiAssistantHistory
 export async function listAiAgentActions(limit = 8): Promise<AiAgentAction[]> {
   const token = getToken();
   const params = new URLSearchParams({ limit: String(limit) });
-  const response = await fetch(`${getBaseUrl()}/ai/assistant/actions?${params.toString()}`, {
+  const response = await requestAi(`/ai/assistant/actions?${params.toString()}`, {
     headers: {
       ...(token && { Authorization: `Bearer ${token}` }),
     },
@@ -78,7 +86,7 @@ export async function createAiTaskDraftAction(
   scope?: Pick<AiAssistantScope, 'type' | 'id'>
 ): Promise<CreateAiTaskDraftActionResult> {
   const token = getToken();
-  const response = await fetch(`${getBaseUrl()}/ai/assistant/task-drafts`, {
+  const response = await requestAi('/ai/assistant/task-drafts', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -96,7 +104,7 @@ export async function createAiTaskDraftAction(
 
 export async function approveAiAgentAction(actionId: number): Promise<ApproveAiAgentActionResult> {
   const token = getToken();
-  const response = await fetch(`${getBaseUrl()}/ai/assistant/actions/${actionId}/approve`, {
+  const response = await requestAi(`/ai/assistant/actions/${actionId}/approve`, {
     method: 'POST',
     headers: {
       ...(token && { Authorization: `Bearer ${token}` }),
@@ -112,7 +120,7 @@ export async function approveAiAgentAction(actionId: number): Promise<ApproveAiA
 
 export async function rejectAiAgentAction(actionId: number): Promise<AiAgentAction> {
   const token = getToken();
-  const response = await fetch(`${getBaseUrl()}/ai/assistant/actions/${actionId}/reject`, {
+  const response = await requestAi(`/ai/assistant/actions/${actionId}/reject`, {
     method: 'POST',
     headers: {
       ...(token && { Authorization: `Bearer ${token}` }),
