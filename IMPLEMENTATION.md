@@ -344,6 +344,7 @@ Zustand Store는 React 컴포넌트 외부에서 실행되므로 `@/di/storeRepo
 - AI 답변의 문단/불릿/굵은 글씨 표시를 개선하고 답변 맥락에 맞는 후속 실행 버튼을 제공
 - 회의/업무/프로젝트/승인 관련 답변에서 새 회의 열기, 업무 초안 생성, 승인 대기 확인 등 다음 행동으로 바로 이어지도록 연결
 - AI 승인 카드에 상태 라벨을 표시하고 승인/보류 후 기존 카드 상태가 갱신되도록 개선
+- 확장/태블릿 화면에서 떠 보이던 `말로 지시하기` 보조 라벨을 제거하고 AI 버튼/패널 위치가 하단 내비게이션과 겹치지 않도록 조정
 - 현재 로컬 서버 구성에 맞춰 프론트는 `5173`, API 프록시는 `5070` 기준으로 정합성 보정
 - 관련 파일: `client/src/features/ai-agent/AgentCommandCenter.tsx`, `client/.env.development`, `client/.env.server`, `client/vite.config.ts`
 

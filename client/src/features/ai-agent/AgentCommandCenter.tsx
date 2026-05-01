@@ -472,7 +472,7 @@ export function AgentCommandCenter() {
           role="dialog"
           aria-modal="false"
           aria-label="INTRUTH AI 명령"
-          className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[75] flex max-h-[min(78vh,42rem)] flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-2xl ring-1 ring-black/5 dark:bg-zinc-950 sm:inset-x-auto sm:right-6 sm:bottom-24 sm:w-[460px]"
+          className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[75] flex max-h-[min(78vh,42rem)] flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-2xl ring-1 ring-black/5 dark:bg-zinc-950 lg:inset-x-auto lg:right-6 lg:bottom-24 lg:w-[460px]"
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
@@ -657,17 +657,12 @@ export function AgentCommandCenter() {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-zinc-950 text-white shadow-xl shadow-black/20 transition hover:scale-[1.02] sm:bottom-8"
+        className="fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 z-[70] flex h-14 w-14 items-center justify-center rounded-full bg-zinc-950 text-white shadow-xl shadow-black/20 transition hover:scale-[1.02] lg:bottom-8"
         aria-label={open ? "AI 명령창 닫기" : "AI 명령창 열기"}
         title={open ? "AI 명령 닫기" : "AI 명령"}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
-
-      <div className="fixed bottom-[calc(9.5rem+env(safe-area-inset-bottom))] left-4 z-[69] hidden rounded-full border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm sm:flex dark:bg-zinc-950">
-        <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
-        말로 지시하기
-      </div>
     </>
   );
 }
