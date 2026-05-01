@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
-import { authenticate, AuthRequest } from '../middleware/auth.js';
-import { getAiTranscriptionService, getMeetingService } from '../di/container.js';
+import { authenticate, checkPermission, AuthRequest } from '../middleware/auth.js';
+import { getAiAssistantService, getAiTranscriptionService, getMeetingService, getTaskService } from '../di/container.js';
 import { handleError, ValidationError } from '../shared/errors.js';
 
 const router = Router();
+const taskPriorities = new Set(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
 
 const audioUpload = multer({
   storage: multer.memoryStorage(),
@@ -84,6 +85,155 @@ router.post('/meetings/:meetingId/materials', authenticate, async (req: AuthRequ
 
     const meeting = await getMeetingService().findById(meetingId);
     res.json({ ...result, meeting });
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.get('/meetings/:meetingId/material-drafts', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiTranscriptionService();
+    const drafts = await service.listMeetingMaterialDrafts(Number(req.params.meetingId), memberContext(req));
+    res.json(drafts);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.post('/meetings/:meetingId/material-drafts', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiTranscriptionService();
+    const result = await service.createMeetingMaterialDraft(Number(req.params.meetingId), memberContext(req), {
+      recordingId: req.body?.recordingId ? Number(req.body.recordingId) : undefined,
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.post('/material-drafts/:draftId/apply', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiTranscriptionService();
+    const result = await service.applyMeetingMaterialDraft(Number(req.params.draftId), memberContext(req), {
+      replaceActionItems: req.body?.replaceActionItems === true,
+    });
+    const meeting = await getMeetingService().findById(result.meetingId);
+    res.json({ ...result, meeting });
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.post('/material-drafts/:draftId/discard', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiTranscriptionService();
+    const draft = await service.discardMeetingMaterialDraft(Number(req.params.draftId), memberContext(req));
+    res.json(draft);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.post(
+  '/meetings/:meetingId/action-items/tasks',
+  authenticate,
+  checkPermission('task.create'),
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const meetingId = Number(req.params.meetingId);
+      const actionItemIds = Array.isArray(req.body?.actionItemIds) ? req.body.actionItemIds.map(Number) : [];
+      const overrides = Array.isArray(req.body?.overrides)
+        ? req.body.overrides.map((item: any) => {
+          const actionItemId = Number(item?.actionItemId);
+
+          if (!Number.isInteger(actionItemId) || actionItemId <= 0) {
+            throw new ValidationError('업무 후보 편집값의 회의 할 일 ID가 올바르지 않습니다.');
+          }
+
+          const override: {
+            actionItemId: number;
+            title?: string;
+            description?: string | null;
+            priority?: string;
+            assigneeId?: string | null;
+            dueDate?: Date | null;
+          } = { actionItemId };
+
+          if (Object.prototype.hasOwnProperty.call(item, 'title')) {
+            override.title = String(item.title || '');
+          }
+
+          if (Object.prototype.hasOwnProperty.call(item, 'description')) {
+            override.description = item.description == null ? null : String(item.description);
+          }
+
+          if (Object.prototype.hasOwnProperty.call(item, 'assigneeId')) {
+            override.assigneeId = item.assigneeId ? String(item.assigneeId) : null;
+          }
+
+          if (Object.prototype.hasOwnProperty.call(item, 'dueDate')) {
+            if (item.dueDate) {
+              const dueDate = new Date(String(item.dueDate));
+              if (Number.isNaN(dueDate.getTime())) {
+                throw new ValidationError('업무 후보 마감일 형식이 올바르지 않습니다.');
+              }
+              override.dueDate = dueDate;
+            } else {
+              override.dueDate = null;
+            }
+          }
+
+          if (Object.prototype.hasOwnProperty.call(item, 'priority')) {
+            if (!taskPriorities.has(String(item.priority))) {
+              throw new ValidationError('업무 후보 우선순위가 올바르지 않습니다.');
+            }
+            override.priority = String(item.priority);
+          }
+
+          return override;
+        })
+        : undefined;
+      const taskService = getTaskService();
+      const result = await taskService.createFromMeetingActionItems({
+        meetingId,
+        actionItemIds,
+        overrides,
+        reporterId: req.member!.id,
+        member: memberContext(req),
+      });
+      const meeting = await getMeetingService().findById(meetingId);
+      res.status(201).json({ ...result, meeting });
+    } catch (error) {
+      const { statusCode, body } = handleError(error);
+      res.status(statusCode).json(body);
+    }
+  }
+);
+
+router.post('/assistant/ask', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiAssistantService();
+    const result = await service.ask(memberContext(req), {
+      prompt: String(req.body?.prompt || ''),
+    });
+    res.json(result);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
+router.get('/assistant/runs', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiAssistantService();
+    const runs = await service.listRecentRuns(memberContext(req), req.query.limit ? Number(req.query.limit) : undefined);
+    res.json(runs);
   } catch (error) {
     const { statusCode, body } = handleError(error);
     res.status(statusCode).json(body);

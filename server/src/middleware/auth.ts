@@ -14,6 +14,18 @@ export interface AuthRequest extends Request {
   };
 }
 
+function parsePermissions(value: unknown): Permission {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as Permission;
+    } catch {
+      return {} as Permission;
+    }
+  }
+
+  return (value || {}) as Permission;
+}
+
 export const authenticate = async (
   req: AuthRequest,
   res: Response,
@@ -46,7 +58,7 @@ export const authenticate = async (
       id: member.id,
       email: member.email,
       roleId: member.roleId,
-      permissions: member.role.permissions as unknown as Permission
+      permissions: parsePermissions(member.role.permissions)
     };
 
     next();

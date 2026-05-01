@@ -7,17 +7,20 @@ import {
   ClipboardCheck,
   FileText,
   FolderPlus,
+  Loader2,
   ListTodo,
   MessageCircle,
   Plus,
   Share2,
+  Sparkles,
   Users,
 } from 'lucide-react';
-import type { ActivityLog, DashboardStats, Meeting, Task } from '@/types';
+import type { ActivityLog, AiAssistantHistoryItem, AiAssistantResult, DashboardStats, Meeting, Task } from '@/types';
 import type { ProjectStats } from '../hooks/useDashboard';
 import { cn } from '@/core/utils/cn';
 import { shareKakaoText, type ShareResult } from '@/shared/share/kakaoShare';
 import { createShareUrl } from '@/shared/share/shareConfig';
+import { askAiAssistant, listAiAssistantRuns } from '@/shared/ai/assistantApi';
 import { toast } from '@/stores/toastStore';
 
 interface MobileDashboardHomeProps {
@@ -178,6 +181,13 @@ export function MobileDashboardHome({
   onCreateProject,
 }: MobileDashboardHomeProps) {
   const [sharingBrief, setSharingBrief] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantPrompt, setAssistantPrompt] = useState('이번 주 우선순위를 정리해줘');
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantResult, setAssistantResult] = useState<AiAssistantResult | null>(null);
+  const [assistantHistory, setAssistantHistory] = useState<AiAssistantHistoryItem[]>([]);
+  const [assistantHistoryLoading, setAssistantHistoryLoading] = useState(false);
+  const [sharingAssistant, setSharingAssistant] = useState(false);
 
   const focusTasks = useMemo(() => {
     const today = startOfToday();
@@ -257,6 +267,69 @@ export function MobileDashboardHome({
     }
   };
 
+  const loadAssistantHistory = async () => {
+    setAssistantHistoryLoading(true);
+    try {
+      const runs = await listAiAssistantRuns(6);
+      setAssistantHistory(runs);
+    } catch (error) {
+      toast.error('AI 기록을 불러오지 못했습니다.', (error as Error).message);
+    } finally {
+      setAssistantHistoryLoading(false);
+    }
+  };
+
+  const handleAskAssistant = async (prompt = assistantPrompt) => {
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
+
+    setAssistantOpen(true);
+    setAssistantPrompt(trimmed);
+    setAssistantLoading(true);
+    try {
+      const result = await askAiAssistant(trimmed);
+      setAssistantResult(result);
+      void loadAssistantHistory();
+    } catch (error) {
+      toast.error('AI 브리핑을 만들지 못했습니다.', (error as Error).message);
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const handleOpenAssistant = () => {
+    setAssistantOpen(true);
+    if (assistantHistory.length === 0 && !assistantHistoryLoading) {
+      void loadAssistantHistory();
+    }
+  };
+
+  const handleSelectAssistantHistory = (item: AiAssistantHistoryItem) => {
+    setAssistantPrompt(item.prompt);
+    if (item.status === 'COMPLETED') {
+      setAssistantResult(item);
+    }
+  };
+
+  const handleShareAssistantBrief = async () => {
+    if (!assistantResult) return;
+
+    setSharingAssistant(true);
+    try {
+      const result = await shareKakaoText({
+        title: 'INTRUTH AI 브리핑',
+        text: assistantResult.kakaoBrief || assistantResult.answer,
+        url: createShareUrl('/'),
+        buttonTitle: 'INTRUTH 열기',
+      });
+      notifyShareResult(result);
+    } catch {
+      toast.error('AI 브리핑 공유에 실패했습니다.');
+    } finally {
+      setSharingAssistant(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <section className="rounded-lg bg-foreground px-4 py-5 text-background">
@@ -283,8 +356,121 @@ export function MobileDashboardHome({
         <QuickTile icon={MessageCircle} label="회의" tone="text-cyan-700" onClick={onCreateMeeting} />
         <QuickTile icon={ClipboardCheck} label="출석" tone="text-amber-600" to="/attendance/check" />
         <QuickTile icon={FolderPlus} label="프로젝트" tone="text-purple-600" onClick={onCreateProject} />
+        <QuickTile icon={Sparkles} label="AI" tone="text-rose-600" onClick={handleOpenAssistant} />
         <QuickTile icon={Share2} label={sharingBrief ? '공유중' : '브리핑'} tone="text-indigo-600" onClick={() => void handleShareWeeklyBrief()} />
       </section>
+
+      {assistantOpen && (
+        <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-base font-bold text-foreground">
+              <Sparkles className="h-4 w-4 text-rose-600" />
+              AI 브리핑
+            </h2>
+            {assistantResult && (
+              <button
+                type="button"
+                onClick={() => void handleShareAssistantBrief()}
+                disabled={sharingAssistant}
+                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border px-3 text-xs font-semibold text-foreground disabled:opacity-60"
+              >
+                {sharingAssistant ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Share2 className="h-3.5 w-3.5" />}
+                공유
+              </button>
+            )}
+          </div>
+
+          <form
+            className="flex gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleAskAssistant();
+            }}
+          >
+            <input
+              value={assistantPrompt}
+              onChange={(event) => setAssistantPrompt(event.target.value)}
+              className="aboard-input min-w-0 flex-1"
+              placeholder="무엇을 확인할까요?"
+            />
+            <button
+              type="submit"
+              disabled={assistantLoading || !assistantPrompt.trim()}
+              className="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+            >
+              {assistantLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : '확인'}
+            </button>
+          </form>
+
+          <div className="flex flex-wrap gap-2">
+            {['지연 위험만 알려줘', '다음 회의 준비를 알려줘', '카카오로 보낼 요약을 만들어줘'].map((question) => (
+              <button
+                key={question}
+                type="button"
+                onClick={() => void handleAskAssistant(question)}
+                className="rounded-full border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground"
+              >
+                {question}
+              </button>
+            ))}
+          </div>
+
+          {(assistantHistory.length > 0 || assistantHistoryLoading) && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground">최근 요청</p>
+                <button
+                  type="button"
+                  onClick={() => void loadAssistantHistory()}
+                  disabled={assistantHistoryLoading}
+                  className="inline-flex min-h-8 items-center justify-center rounded-lg px-2 text-xs font-semibold text-primary disabled:opacity-60"
+                >
+                  {assistantHistoryLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : '새로고침'}
+                </button>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {assistantHistory.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectAssistantHistory(item)}
+                    className="min-h-20 w-48 shrink-0 rounded-lg border border-border bg-muted/30 p-3 text-left transition-colors hover:bg-muted"
+                  >
+                    <span className="line-clamp-2 text-xs font-semibold text-foreground">{item.prompt}</span>
+                    <span className="mt-2 block text-[11px] text-muted-foreground">
+                      {formatShortDate(item.createdAt)} · {item.mode === 'openai' ? 'OpenAI' : 'Local'}
+                    </span>
+                    {item.status === 'FAILED' && (
+                      <span className="mt-1 block text-[11px] text-amber-600">실패</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {assistantResult && (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-muted/40 p-3">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{assistantResult.answer}</p>
+              </div>
+              {assistantResult.highlights.length > 0 && (
+                <div className="space-y-2">
+                  {assistantResult.highlights.map((item, index) => (
+                    <div key={`${item}-${index}`} className="flex gap-2 text-sm text-foreground">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                업무 {assistantResult.sourceCounts.tasks}개 · 회의 {assistantResult.sourceCounts.meetings}건 · 프로젝트 {assistantResult.sourceCounts.projects}개
+              </p>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">

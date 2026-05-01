@@ -1,4 +1,12 @@
-import type { GenerateMeetingMaterialsResult, MeetingRecording } from '@/types';
+import type {
+  ApplyMeetingMaterialDraftResult,
+  CreateTasksFromMeetingActionItemsResult,
+  CreateMeetingMaterialDraftResult,
+  GenerateMeetingMaterialsResult,
+  MeetingActionItemTaskOverride,
+  MeetingMaterialDraft,
+  MeetingRecording,
+} from '@/types';
 
 function getBaseUrl() {
   return import.meta.env.VITE_API_BASE_URL || '/api';
@@ -80,6 +88,101 @@ export async function generateMeetingMaterials(
       ...(token && { Authorization: `Bearer ${token}` }),
     },
     body: JSON.stringify(options || {}),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function listMeetingMaterialDrafts(meetingId: number): Promise<MeetingMaterialDraft[]> {
+  const token = getToken();
+  const response = await fetch(`${getBaseUrl()}/ai/meetings/${meetingId}/material-drafts`, {
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function createMeetingMaterialDraft(
+  meetingId: number,
+  options?: { recordingId?: number }
+): Promise<CreateMeetingMaterialDraftResult> {
+  const token = getToken();
+  const response = await fetch(`${getBaseUrl()}/ai/meetings/${meetingId}/material-drafts`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: JSON.stringify(options || {}),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function applyMeetingMaterialDraft(
+  draftId: number,
+  options?: { replaceActionItems?: boolean }
+): Promise<ApplyMeetingMaterialDraftResult> {
+  const token = getToken();
+  const response = await fetch(`${getBaseUrl()}/ai/material-drafts/${draftId}/apply`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: JSON.stringify(options || {}),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function discardMeetingMaterialDraft(draftId: number): Promise<MeetingMaterialDraft> {
+  const token = getToken();
+  const response = await fetch(`${getBaseUrl()}/ai/material-drafts/${draftId}/discard`, {
+    method: 'POST',
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return response.json();
+}
+
+export async function createTasksFromMeetingActionItems(
+  meetingId: number,
+  actionItemIds: number[],
+  overrides?: MeetingActionItemTaskOverride[]
+): Promise<CreateTasksFromMeetingActionItemsResult> {
+  const token = getToken();
+  const response = await fetch(`${getBaseUrl()}/ai/meetings/${meetingId}/action-items/tasks`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: JSON.stringify({ actionItemIds, overrides }),
   });
 
   if (!response.ok) {

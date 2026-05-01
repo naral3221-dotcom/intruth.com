@@ -325,6 +325,7 @@ export interface MeetingActionItem {
   dueDate?: string;
   priority: ActionItemPriority;
   status: ActionItemStatus;
+  taskId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -399,12 +400,85 @@ export interface MeetingMaterials {
   followUpQuestions: string[];
 }
 
+export type MeetingMaterialDraftStatus = 'DRAFT' | 'APPLIED' | 'DISCARDED';
+
+export interface MeetingMaterialDraft {
+  id: number;
+  meetingId: number;
+  recordingId?: number | null;
+  materials: MeetingMaterials;
+  transcriptSnippet?: string | null;
+  sourceRecordingCount: number;
+  status: MeetingMaterialDraftStatus;
+  createdById: string;
+  appliedById?: string | null;
+  appliedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GenerateMeetingMaterialsResult {
   materials: MeetingMaterials;
   applied: boolean;
   createdActionItemCount: number;
   recordingCount: number;
   meeting: Meeting;
+}
+
+export interface CreateMeetingMaterialDraftResult {
+  draft: MeetingMaterialDraft;
+  materials: MeetingMaterials;
+  recordingCount: number;
+}
+
+export interface ApplyMeetingMaterialDraftResult {
+  draft: MeetingMaterialDraft;
+  materials: MeetingMaterials;
+  meetingId: number;
+  applied: boolean;
+  createdActionItemCount: number;
+  meeting: Meeting;
+}
+
+export interface CreateTasksFromMeetingActionItemsResult {
+  tasks: Task[];
+  meetingId: number;
+  projectId: string;
+  convertedActionItemIds: number[];
+  skippedActionItemIds: number[];
+  meeting: Meeting;
+}
+
+export interface MeetingActionItemTaskOverride {
+  actionItemId: number;
+  title?: string;
+  description?: string | null;
+  priority?: ActionItemPriority;
+  assigneeId?: string | null;
+  dueDate?: string | null;
+}
+
+export interface AiAssistantResult {
+  runId?: number;
+  answer: string;
+  highlights: string[];
+  suggestedQuestions: string[];
+  kakaoBrief: string;
+  sourceCounts: {
+    tasks: number;
+    meetings: number;
+    projects: number;
+  };
+  generatedAt: string;
+  mode: 'openai' | 'local';
+}
+
+export interface AiAssistantHistoryItem extends AiAssistantResult {
+  id: number;
+  prompt: string;
+  status: 'COMPLETED' | 'FAILED';
+  errorMessage?: string | null;
+  createdAt: string;
 }
 
 export interface MeetingComment {

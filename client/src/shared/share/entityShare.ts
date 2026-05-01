@@ -73,6 +73,34 @@ export async function shareTask(task: Task) {
   );
 }
 
+export async function shareTaskBundle(tasks: Task[], options?: { title?: string; context?: string }) {
+  const visibleTasks = tasks.slice(0, 8);
+  const lines = visibleTasks.map((task, index) => {
+    const dueText = task.dueDate ? ` / ${formatDate(task.dueDate)}` : '';
+    const assigneeText = task.assignee?.name ? ` / ${task.assignee.name}` : '';
+    return `${index + 1}. ${task.title}${assigneeText}${dueText}`;
+  });
+  const title = options?.title || 'INTRUTH 업무 공유';
+  const text = [
+    options?.context || '[INTRUTH 생성 업무]',
+    ...lines,
+    tasks.length > visibleTasks.length ? `외 ${tasks.length - visibleTasks.length}개` : null,
+  ].filter(Boolean).join('\n');
+
+  return resultPath(
+    await shareKakaoText({
+      title,
+      text,
+      url: createShareUrl('/tasks'),
+      buttonTitle: '업무 보기',
+      serverCallbackArgs: {
+        type: 'task-bundle',
+        id: visibleTasks.map((task) => task.id).join(',').slice(0, 100),
+      },
+    })
+  );
+}
+
 export async function shareProject(project: Project) {
   const description = compact(stripHtml(project.description) || '프로젝트 내용을 확인해주세요.');
   const taskCount = project._count?.tasks ?? 0;

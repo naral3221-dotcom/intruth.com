@@ -43,6 +43,7 @@ model Member {
   reportedTasks     Task[]            @relation("TaskReporter")
   comments          Comment[]
   activityLogs      ActivityLog[]
+  assistantRuns     AiAssistantRun[]
 
   // Cell 관련 관계
   ledCells           Cell[]       @relation("CellLeader")
@@ -105,14 +106,15 @@ model Task {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee     Member?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  reporter     Member?       @relation("TaskReporter", fields: [reporterId], references: [id])
-  parent       Task?         @relation("TaskSubtasks", fields: [parentId], references: [id])
-  subtasks     Task[]        @relation("TaskSubtasks")
-  labels       TaskLabelRelation[]
-  comments     Comment[]
-  activityLogs ActivityLog[]
+  project            Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee           Member?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  reporter           Member?       @relation("TaskReporter", fields: [reporterId], references: [id])
+  parent             Task?         @relation("TaskSubtasks", fields: [parentId], references: [id])
+  subtasks           Task[]        @relation("TaskSubtasks")
+  labels             TaskLabelRelation[]
+  comments           Comment[]
+  activityLogs       ActivityLog[]
+  meetingActionItem  MeetingActionItem?
 
   @@map("tasks")
 }
@@ -190,6 +192,7 @@ model Meeting {
   agendas     MeetingAgenda[]
   actionItems MeetingActionItem[]
   recordings  MeetingRecording[]
+  materialDrafts MeetingMaterialDraft[]
 
   @@map("wf_meetings")
 }
@@ -261,11 +264,14 @@ model MeetingActionItem {
   dueDate     DateTime? @map("due_date")
   priority    String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
   status      String    @default("TODO")   // TODO, IN_PROGRESS, DONE
+  taskId      String?   @unique @map("task_id")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
+  @@index([taskId])
   @@map("wf_meeting_action_items")
 }
 
@@ -309,6 +315,47 @@ model MeetingTranscriptSegment {
 
   @@index([recordingId])
   @@map("wf_meeting_transcript_segments")
+}
+
+model MeetingMaterialDraft {
+  id                   Int       @id @default(autoincrement())
+  meetingId            Int       @map("meeting_id")
+  recordingId          Int?      @map("recording_id")
+  materials            Json
+  transcriptSnippet    String?   @map("transcript_snippet")
+  sourceRecordingCount Int       @default(0) @map("source_recording_count")
+  status               String    @default("DRAFT") // DRAFT, APPLIED, DISCARDED
+  createdById          String    @map("created_by_id")
+  appliedById          String?   @map("applied_by_id")
+  appliedAt            DateTime? @map("applied_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId, status])
+  @@index([createdById])
+  @@map("wf_meeting_material_drafts")
+}
+
+model AiAssistantRun {
+  id                 Int      @id @default(autoincrement())
+  memberId           String   @map("member_id")
+  prompt             String
+  answer             String
+  highlights         Json
+  suggestedQuestions Json     @map("suggested_questions")
+  kakaoBrief         String   @map("kakao_brief")
+  sourceCounts       Json     @map("source_counts")
+  mode               String
+  status             String   @default("COMPLETED") // COMPLETED, FAILED
+  errorMessage       String?  @map("error_message")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId, createdAt])
+  @@map("wf_ai_assistant_runs")
 }
 
 // ==================== 셀 그룹 출석 관리 모델 ====================

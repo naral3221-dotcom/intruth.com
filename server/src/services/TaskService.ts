@@ -4,7 +4,7 @@
  */
 import { PrismaClient, Prisma } from '@prisma/client';
 import { ActivityLogService } from './ActivityLogService.js';
-import { NotFoundError, ValidationError } from '../shared/errors.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../shared/errors.js';
 
 // Input DTOs
 export interface CreateTaskInput {
@@ -43,6 +43,28 @@ export interface TaskListParams {
   assigneeId?: string;
 }
 
+export interface TaskActorContext {
+  id: string;
+  permissions?: Record<string, Record<string, boolean>>;
+}
+
+export interface CreateTasksFromMeetingActionItemsInput {
+  meetingId: number;
+  actionItemIds: number[];
+  overrides?: MeetingActionItemTaskOverride[];
+  reporterId: string;
+  member: TaskActorContext;
+}
+
+export interface MeetingActionItemTaskOverride {
+  actionItemId: number;
+  title?: string;
+  description?: string | null;
+  priority?: string;
+  assigneeId?: string | null;
+  dueDate?: Date | null;
+}
+
 export class TaskService {
   private readonly defaultInclude = {
     assignee: { select: { id: true, name: true, avatarUrl: true } },
@@ -55,6 +77,28 @@ export class TaskService {
     private prisma: PrismaClient,
     private activityLogService: ActivityLogService
   ) {}
+
+  private checkMeetingPermission(authorId: string, member: TaskActorContext): void {
+    const isAuthor = authorId === member.id;
+    const isAdmin = member.permissions?.system?.manage_settings;
+
+    if (!isAuthor && !isAdmin) {
+      throw new ForbiddenError('회의 할 일을 업무로 전환할 권한이 없습니다.');
+    }
+  }
+
+  private formatMeetingTaskDescription(input: {
+    meetingTitle: string;
+    meetingDate: Date;
+    actionDescription?: string | null;
+  }) {
+    const context = [
+      `회의자료: ${input.meetingTitle}`,
+      `회의일: ${input.meetingDate.toISOString().slice(0, 10)}`,
+    ].join('\n');
+
+    return [input.actionDescription?.trim(), context].filter(Boolean).join('\n\n');
+  }
 
   /**
    * 업무 목록 조회
@@ -153,6 +197,178 @@ export class TaskService {
       });
 
       return task;
+    });
+  }
+
+  /**
+   * 회의 할 일을 실제 업무로 전환
+   */
+  async createFromMeetingActionItems(input: CreateTasksFromMeetingActionItemsInput) {
+    const actionItemIds = Array.from(
+      new Set(input.actionItemIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))
+    );
+    const overrideByActionItemId = new Map<number, MeetingActionItemTaskOverride>();
+
+    for (const override of input.overrides || []) {
+      const actionItemId = Number(override.actionItemId);
+      if (Number.isInteger(actionItemId) && actionItemId > 0) {
+        overrideByActionItemId.set(actionItemId, { ...override, actionItemId });
+      }
+    }
+
+    if (actionItemIds.length === 0) {
+      throw new ValidationError('업무로 만들 회의 할 일을 선택해주세요.');
+    }
+
+    const invalidOverrideIds = Array.from(overrideByActionItemId.keys()).filter(
+      (actionItemId) => !actionItemIds.includes(actionItemId)
+    );
+
+    if (invalidOverrideIds.length > 0) {
+      throw new ValidationError('선택하지 않은 회의 할 일의 편집값이 포함되어 있습니다.');
+    }
+
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: input.meetingId },
+      include: {
+        actionItems: {
+          where: { id: { in: actionItemIds } },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!meeting) {
+      throw new NotFoundError('회의자료를 찾을 수 없습니다.');
+    }
+
+    this.checkMeetingPermission(meeting.authorId, input.member);
+
+    if (!meeting.projectId) {
+      throw new ValidationError('업무로 전환하려면 회의자료에 프로젝트를 먼저 연결해야 합니다.');
+    }
+
+    if (meeting.actionItems.length !== actionItemIds.length) {
+      throw new ValidationError('선택한 회의 할 일 중 찾을 수 없는 항목이 있습니다.');
+    }
+
+    const overrideAssigneeIds = Array.from(new Set(
+      Array.from(overrideByActionItemId.values())
+        .map((override) => override.assigneeId)
+        .filter((assigneeId): assigneeId is string => Boolean(assigneeId))
+    ));
+
+    if (overrideAssigneeIds.length > 0) {
+      const existingAssignees = await this.prisma.member.findMany({
+        where: { id: { in: overrideAssigneeIds }, isActive: true },
+        select: { id: true },
+      });
+      const existingAssigneeIds = new Set(existingAssignees.map((member) => member.id));
+      const missingAssigneeIds = overrideAssigneeIds.filter((assigneeId) => !existingAssigneeIds.has(assigneeId));
+
+      if (missingAssigneeIds.length > 0) {
+        throw new ValidationError('담당자로 선택할 수 없는 멤버가 포함되어 있습니다.');
+      }
+    }
+
+    const skippedActionItemIds = meeting.actionItems
+      .filter((item) => Boolean(item.taskId))
+      .map((item) => item.id);
+    const actionItemsToConvert = meeting.actionItems.filter((item) => !item.taskId);
+
+    if (actionItemsToConvert.length === 0) {
+      return {
+        tasks: [],
+        meetingId: meeting.id,
+        projectId: meeting.projectId,
+        convertedActionItemIds: [],
+        skippedActionItemIds,
+      };
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const lastTask = await tx.task.findFirst({
+        where: { projectId: meeting.projectId!, status: 'TODO' },
+        orderBy: { order: 'desc' },
+        select: { order: true },
+      });
+
+      let nextOrder = lastTask?.order || 0;
+      const tasks = [];
+      const convertedActionItemIds: number[] = [];
+
+      for (const item of actionItemsToConvert) {
+        const override = overrideByActionItemId.get(item.id);
+        const title = override?.title !== undefined ? override.title.trim() : item.title.trim();
+        const description = override?.description !== undefined
+          ? override.description?.trim() || null
+          : item.description;
+        const priority = override?.priority || item.priority || 'MEDIUM';
+        const assigneeId = override?.assigneeId !== undefined
+          ? override.assigneeId || null
+          : item.assigneeId;
+        const dueDate = override?.dueDate !== undefined
+          ? override.dueDate
+          : item.dueDate;
+
+        if (!title) {
+          throw new ValidationError('업무 제목은 비워둘 수 없습니다.');
+        }
+
+        nextOrder += 1;
+        const task = await tx.task.create({
+          data: {
+            projectId: meeting.projectId!,
+            title,
+            description: this.formatMeetingTaskDescription({
+              meetingTitle: meeting.title,
+              meetingDate: meeting.meetingDate,
+              actionDescription: description,
+            }),
+            priority,
+            assigneeId: assigneeId || undefined,
+            reporterId: input.reporterId,
+            dueDate: dueDate ?? undefined,
+            order: nextOrder,
+          },
+          include: this.defaultInclude,
+        });
+
+        await tx.meetingActionItem.update({
+          where: { id: item.id },
+          data: {
+            title,
+            description,
+            priority,
+            assigneeId,
+            dueDate,
+            taskId: task.id,
+          },
+        });
+
+        await this.activityLogService.createWithTransaction(tx, {
+          taskId: task.id,
+          memberId: input.reporterId,
+          action: 'created',
+          details: {
+            title: task.title,
+            source: 'meeting_action_item',
+            meetingId: meeting.id,
+            actionItemId: item.id,
+          },
+        });
+
+        tasks.push(task);
+        convertedActionItemIds.push(item.id);
+      }
+
+      return {
+        tasks,
+        meetingId: meeting.id,
+        projectId: meeting.projectId!,
+        convertedActionItemIds,
+        skippedActionItemIds,
+      };
     });
   }
 

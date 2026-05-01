@@ -12,7 +12,7 @@ import { AuthService } from '../services/AuthService.js';
 import { MeetingService } from '../services/MeetingService.js';
 import { CellService } from '../services/CellService.js';
 import { AttendanceService } from '../services/AttendanceService.js';
-import { AiTranscriptionService } from '../services/ai/index.js';
+import { AiAssistantService, AiTranscriptionService } from '../services/ai/index.js';
 import { IStorageService, LocalStorageService } from '../services/storage/index.js';
 
 // 서비스 타입 정의
@@ -27,7 +27,8 @@ type ServiceName =
   | 'StorageService'
   | 'CellService'
   | 'AttendanceService'
-  | 'AiTranscriptionService';
+  | 'AiTranscriptionService'
+  | 'AiAssistantService';
 
 interface ServiceMap {
   ActivityLogService: ActivityLogService;
@@ -41,6 +42,7 @@ interface ServiceMap {
   CellService: CellService;
   AttendanceService: AttendanceService;
   AiTranscriptionService: AiTranscriptionService;
+  AiAssistantService: AiAssistantService;
 }
 
 /**
@@ -94,6 +96,9 @@ class Container {
 
     const aiTranscriptionService = new AiTranscriptionService(prisma, storageService);
     this.instances.set('AiTranscriptionService', aiTranscriptionService);
+
+    const aiAssistantService = new AiAssistantService(prisma);
+    this.instances.set('AiAssistantService', aiAssistantService);
 
     // 6. 셀 출석 관련 서비스
     const cellService = new CellService(prisma);
@@ -190,4 +195,8 @@ export function getAttendanceService(): AttendanceService {
 
 export function getAiTranscriptionService(): AiTranscriptionService {
   return container.resolve('AiTranscriptionService');
+}
+
+export function getAiAssistantService(): AiAssistantService {
+  return container.resolve('AiAssistantService');
 }

@@ -3,12 +3,13 @@
  * 회의 녹음 업로드, 저장, 전사 실행을 담당
  */
 import OpenAI, { toFile } from 'openai';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors.js';
 import { IStorageService } from '../storage/IStorageService.js';
 
 type RecordingStatus = 'UPLOADED' | 'TRANSCRIBING' | 'TRANSCRIBED' | 'FAILED';
 type ActionItemPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+type MeetingMaterialDraftStatus = 'DRAFT' | 'APPLIED' | 'DISCARDED';
 
 interface MemberContext {
   id: string;
@@ -44,6 +45,14 @@ export interface MeetingMaterials {
 export interface GenerateMeetingMaterialsOptions {
   recordingId?: number;
   applyToMeeting?: boolean;
+  replaceActionItems?: boolean;
+}
+
+export interface CreateMeetingMaterialDraftOptions {
+  recordingId?: number;
+}
+
+export interface ApplyMeetingMaterialDraftOptions {
   replaceActionItems?: boolean;
 }
 
@@ -263,6 +272,83 @@ export class AiTranscriptionService {
     return 'MEDIUM';
   }
 
+  private normalizePersonName(value: string | null | undefined): string {
+    return (value || '')
+      .toLowerCase()
+      .replace(/님|목사|전도사|간사|리더|팀장|형제|자매/g, '')
+      .replace(/[^a-z0-9가-힣]/g, '')
+      .trim();
+  }
+
+  private async findAssigneeCandidates(meeting: { id: number; projectId: string | null; authorId: string }) {
+    const [attendees, projectMembers] = await Promise.all([
+      this.prisma.meetingAttendee.findMany({
+        where: { meetingId: meeting.id },
+        select: { memberId: true },
+      }),
+      meeting.projectId
+        ? this.prisma.projectMember.findMany({
+            where: { projectId: meeting.projectId },
+            select: { memberId: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const scopedIds = Array.from(new Set([
+      meeting.authorId,
+      ...attendees.map((item) => item.memberId),
+      ...projectMembers.map((item) => item.memberId),
+    ]));
+
+    const [scopedMembers, activeMembers] = await Promise.all([
+      scopedIds.length
+        ? this.prisma.member.findMany({
+            where: { id: { in: scopedIds }, isActive: true },
+            select: { id: true, name: true, email: true, username: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.member.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, email: true, username: true },
+        take: 80,
+      }),
+    ]);
+
+    const memberMap = new Map<string, { id: string; name: string; email: string; username: string | null }>();
+    [...scopedMembers, ...activeMembers].forEach((member) => memberMap.set(member.id, member));
+    return Array.from(memberMap.values());
+  }
+
+  private matchAssigneeId(
+    ownerName: string | null,
+    candidates: Array<{ id: string; name: string; email: string; username: string | null }>
+  ): string | null {
+    const normalizedOwner = this.normalizePersonName(ownerName);
+    if (!normalizedOwner) return null;
+
+    const normalizedCandidates = candidates.map((candidate) => ({
+      id: candidate.id,
+      names: [
+        candidate.name,
+        candidate.username,
+        candidate.email?.split('@')[0],
+      ].map((value) => this.normalizePersonName(value)).filter(Boolean),
+    }));
+
+    const exact = normalizedCandidates.find((candidate) => (
+      candidate.names.some((name) => name === normalizedOwner)
+    ));
+    if (exact) return exact.id;
+
+    const partial = normalizedCandidates.find((candidate) => (
+      candidate.names.some((name) => (
+        name.length >= 2 && normalizedOwner.length >= 2 && (name.includes(normalizedOwner) || normalizedOwner.includes(name))
+      ))
+    ));
+
+    return partial?.id || null;
+  }
+
   private formatMeetingContent(materials: MeetingMaterials): string {
     const sections = [
       `# ${materials.title}`,
@@ -378,11 +464,14 @@ export class AiTranscriptionService {
     return this.normalizeMaterials(JSON.parse(outputText));
   }
 
-  async generateMeetingMaterials(
-    meetingId: number,
-    member: MemberContext,
-    options: GenerateMeetingMaterialsOptions = {}
-  ) {
+  private serializeMaterialDraft<T extends { materials: Prisma.JsonValue }>(draft: T) {
+    return {
+      ...draft,
+      materials: this.normalizeMaterials(draft.materials),
+    };
+  }
+
+  private async findMeetingWithActionItems(meetingId: number, member: MemberContext) {
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
       include: {
@@ -395,12 +484,15 @@ export class AiTranscriptionService {
     }
 
     this.checkPermission(meeting.authorId, member);
+    return meeting;
+  }
 
+  private async findTranscribedRecordings(meetingId: number, recordingId?: number) {
     const recordings = await this.prisma.meetingRecording.findMany({
       where: {
         meetingId,
         status: 'TRANSCRIBED',
-        ...(options.recordingId ? { id: options.recordingId } : {}),
+        ...(recordingId ? { id: recordingId } : {}),
       },
       include: {
         segments: { orderBy: { order: 'asc' } },
@@ -412,6 +504,14 @@ export class AiTranscriptionService {
       throw new ValidationError('No transcribed recording is available for this meeting.');
     }
 
+    return recordings;
+  }
+
+  private async createMaterialsFromMeetingInput(
+    meeting: Awaited<ReturnType<AiTranscriptionService['findMeetingWithActionItems']>>,
+    recordingId?: number
+  ) {
+    const recordings = await this.findTranscribedRecordings(meeting.id, recordingId);
     const transcript = this.buildTranscript(recordings);
     if (!transcript.trim()) {
       throw new ValidationError('Transcript text is empty.');
@@ -426,52 +526,78 @@ export class AiTranscriptionService {
       transcript,
     });
 
-    let createdActionItemCount = 0;
+    return { materials, recordings, transcript };
+  }
 
-    if (options.applyToMeeting !== false) {
-      if (options.replaceActionItems) {
-        await this.prisma.meetingActionItem.deleteMany({ where: { meetingId } });
+  private async applyMaterialsToMeeting(
+    meeting: Awaited<ReturnType<AiTranscriptionService['findMeetingWithActionItems']>>,
+    materials: MeetingMaterials,
+    options: ApplyMeetingMaterialDraftOptions = {}
+  ) {
+    if (options.replaceActionItems) {
+      await this.prisma.meetingActionItem.deleteMany({ where: { meetingId: meeting.id } });
+    }
+
+    const existingTitles = new Set(
+      (options.replaceActionItems ? [] : meeting.actionItems)
+        .map((item) => item.title.trim().toLowerCase())
+    );
+    const actionItemsToCreate = materials.actionItems.filter((item) => {
+      const normalizedTitle = item.title.trim().toLowerCase();
+      if (existingTitles.has(normalizedTitle)) {
+        return false;
       }
+      existingTitles.add(normalizedTitle);
+      return true;
+    });
+    const assigneeCandidates = await this.findAssigneeCandidates(meeting);
 
-      const existingTitles = new Set(
-        (options.replaceActionItems ? [] : meeting.actionItems)
-          .map((item) => item.title.trim().toLowerCase())
-      );
-      const actionItemsToCreate = materials.actionItems.filter((item) => {
-        const normalizedTitle = item.title.trim().toLowerCase();
-        if (existingTitles.has(normalizedTitle)) {
-          return false;
-        }
-        existingTitles.add(normalizedTitle);
-        return true;
-      });
-
-      await this.prisma.$transaction([
-        this.prisma.meeting.update({
-          where: { id: meetingId },
-          data: {
-            summary: materials.summary,
-            content: this.mergeGeneratedContent(meeting.content, this.formatMeetingContent(materials)),
-            contentType: 'text',
-          },
-        }),
-        ...actionItemsToCreate.map((item) =>
-          this.prisma.meetingActionItem.create({
+    await this.prisma.$transaction([
+      this.prisma.meeting.update({
+        where: { id: meeting.id },
+        data: {
+          summary: materials.summary,
+          content: this.mergeGeneratedContent(meeting.content, this.formatMeetingContent(materials)),
+          contentType: 'text',
+        },
+      }),
+      ...actionItemsToCreate.map((item) =>
+        {
+          const assigneeId = this.matchAssigneeId(item.ownerName, assigneeCandidates);
+          return this.prisma.meetingActionItem.create({
             data: {
-              meetingId,
+              meetingId: meeting.id,
               title: item.title,
               description: [
                 item.description,
-                item.ownerName ? `담당 제안: ${item.ownerName}` : null,
+                item.ownerName && !assigneeId ? `담당 제안: ${item.ownerName}` : null,
               ].filter(Boolean).join('\n') || null,
+              assigneeId,
               dueDate: this.parseDueDate(item.dueDate),
               priority: item.priority,
             },
-          })
-        ),
-      ]);
+          });
+        }
+      ),
+    ]);
 
-      createdActionItemCount = actionItemsToCreate.length;
+    return actionItemsToCreate.length;
+  }
+
+  async generateMeetingMaterials(
+    meetingId: number,
+    member: MemberContext,
+    options: GenerateMeetingMaterialsOptions = {}
+  ) {
+    const meeting = await this.findMeetingWithActionItems(meetingId, member);
+    const { materials, recordings } = await this.createMaterialsFromMeetingInput(meeting, options.recordingId);
+
+    let createdActionItemCount = 0;
+
+    if (options.applyToMeeting !== false) {
+      createdActionItemCount = await this.applyMaterialsToMeeting(meeting, materials, {
+        replaceActionItems: options.replaceActionItems,
+      });
     }
 
     return {
@@ -480,6 +606,119 @@ export class AiTranscriptionService {
       createdActionItemCount,
       recordingCount: recordings.length,
     };
+  }
+
+  async listMeetingMaterialDrafts(meetingId: number, member: MemberContext) {
+    await this.findMeetingForMember(meetingId, member);
+
+    const drafts = await this.prisma.meetingMaterialDraft.findMany({
+      where: { meetingId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return drafts.map((draft) => this.serializeMaterialDraft(draft));
+  }
+
+  async createMeetingMaterialDraft(
+    meetingId: number,
+    member: MemberContext,
+    options: CreateMeetingMaterialDraftOptions = {}
+  ) {
+    const meeting = await this.findMeetingWithActionItems(meetingId, member);
+    const { materials, recordings, transcript } = await this.createMaterialsFromMeetingInput(
+      meeting,
+      options.recordingId
+    );
+
+    const draft = await this.prisma.meetingMaterialDraft.create({
+      data: {
+        meetingId,
+        recordingId: options.recordingId ?? null,
+        materials: materials as unknown as Prisma.InputJsonValue,
+        transcriptSnippet: transcript.slice(0, 4000),
+        sourceRecordingCount: recordings.length,
+        status: 'DRAFT' satisfies MeetingMaterialDraftStatus,
+        createdById: member.id,
+      },
+    });
+
+    return {
+      draft: this.serializeMaterialDraft(draft),
+      materials,
+      recordingCount: recordings.length,
+    };
+  }
+
+  async applyMeetingMaterialDraft(
+    draftId: number,
+    member: MemberContext,
+    options: ApplyMeetingMaterialDraftOptions = {}
+  ) {
+    const draft = await this.prisma.meetingMaterialDraft.findUnique({
+      where: { id: draftId },
+      include: {
+        meeting: {
+          include: {
+            actionItems: { select: { title: true } },
+          },
+        },
+      },
+    });
+
+    if (!draft) {
+      throw new NotFoundError('Meeting material draft not found.');
+    }
+
+    this.checkPermission(draft.meeting.authorId, member);
+
+    if (draft.status !== 'DRAFT') {
+      throw new ValidationError('Only draft meeting materials can be applied.');
+    }
+
+    const materials = this.normalizeMaterials(draft.materials);
+    const createdActionItemCount = await this.applyMaterialsToMeeting(draft.meeting, materials, options);
+    const updatedDraft = await this.prisma.meetingMaterialDraft.update({
+      where: { id: draft.id },
+      data: {
+        status: 'APPLIED' satisfies MeetingMaterialDraftStatus,
+        appliedById: member.id,
+        appliedAt: new Date(),
+      },
+    });
+
+    return {
+      draft: this.serializeMaterialDraft(updatedDraft),
+      materials,
+      meetingId: draft.meetingId,
+      applied: true,
+      createdActionItemCount,
+    };
+  }
+
+  async discardMeetingMaterialDraft(draftId: number, member: MemberContext) {
+    const draft = await this.prisma.meetingMaterialDraft.findUnique({
+      where: { id: draftId },
+      include: {
+        meeting: { select: { authorId: true } },
+      },
+    });
+
+    if (!draft) {
+      throw new NotFoundError('Meeting material draft not found.');
+    }
+
+    this.checkPermission(draft.meeting.authorId, member);
+
+    if (draft.status !== 'DRAFT') {
+      throw new ValidationError('Only draft meeting materials can be discarded.');
+    }
+
+    const updatedDraft = await this.prisma.meetingMaterialDraft.update({
+      where: { id: draft.id },
+      data: { status: 'DISCARDED' satisfies MeetingMaterialDraftStatus },
+    });
+
+    return this.serializeMaterialDraft(updatedDraft);
   }
 
   async transcribeRecording(recordingId: number, member: MemberContext) {
