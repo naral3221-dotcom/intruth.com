@@ -27,6 +27,9 @@ const KanbanBoard = lazy(() =>
 const ProjectsPage = lazy(() =>
     import("@/presentation/pages/ProjectsPage").then(m => ({ default: m.ProjectsPage }))
 );
+const FileManagementPage = lazy(() =>
+    import("@/presentation/pages/FileManagementPage").then(m => ({ default: m.FileManagementPage }))
+);
 const TeamPage = lazy(() =>
     import("@/presentation/pages/TeamPage").then(m => ({ default: m.TeamPage }))
 );
@@ -136,6 +139,11 @@ function AuthenticatedApp() {
                     <Route path="/projects" element={
                         <Suspense fallback={<PageLoader />}>
                             <ProjectsPage />
+                        </Suspense>
+                    } />
+                    <Route path="/files" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <FileManagementPage />
                         </Suspense>
                     } />
                     <Route path="/team" element={

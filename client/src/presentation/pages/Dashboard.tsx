@@ -21,6 +21,7 @@ import {
     TeamProgress,
     ActivityFeed,
     MobileDashboardHome,
+    ScheduleCalendar,
 } from "@/features/dashboard";
 
 // Quick Action Button Component
@@ -247,6 +248,14 @@ export function Dashboard() {
                     <QuickActionButton icon={Calendar} label="일정 확인" />
                 </motion.div>
             </header>
+
+            <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.25 }}
+            >
+                <ScheduleCalendar tasks={allTasks} meetings={meetings} />
+            </motion.div>
 
             {/* Main Grid - Widget Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

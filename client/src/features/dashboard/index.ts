@@ -12,6 +12,7 @@ export {
     TeamProgress,
     ActivityFeed,
     MobileDashboardHome,
+    ScheduleCalendar,
 } from './components';
 
 // Types

@@ -5,6 +5,7 @@ const ROUTES = [
   { name: 'my-tasks', path: '/my-tasks' },
   { name: 'tasks', path: '/tasks' },
   { name: 'projects', path: '/projects' },
+  { name: 'files', path: '/files' },
   { name: 'team', path: '/team' },
   { name: 'meetings', path: '/meetings' },
   { name: 'gantt', path: '/gantt' },
@@ -174,7 +175,7 @@ test.describe('INTRUTH UI audit', () => {
     await page.getByLabel('메뉴 열기').click();
     await expect(page.getByRole('button', { name: '메뉴 닫기' })).toBeVisible();
     await expect(page.getByText('INTRUTH').first()).toBeVisible();
-    await expect(page.getByRole('link', { name: /회의자료/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: '회의자료' }).first()).toBeVisible();
     await auditCurrentPage(page, testInfo, 'mobile-menu');
     expect(errors).toEqual([]);
   });

@@ -25,6 +25,7 @@ import { cn } from '@/core/utils/cn';
 import { shareKakaoText, type ShareResult } from '@/shared/share/kakaoShare';
 import { createShareUrl } from '@/shared/share/shareConfig';
 import { toast } from '@/stores/toastStore';
+import { ScheduleCalendar } from './ScheduleCalendar';
 
 interface MobileDashboardHomeProps {
   memberName?: string;
@@ -291,6 +292,8 @@ export function MobileDashboardHome({
           </div>
         </div>
       </section>
+
+      <ScheduleCalendar tasks={myTasks} meetings={meetings} compact />
 
       <section className="grid grid-cols-3 gap-2">
         <QuickTile icon={Plus} label="업무" tone="text-green-600" onClick={onCreateTask} />

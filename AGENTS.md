@@ -113,7 +113,8 @@
 │   │   └── AgentCommandCenter.tsx       # 전역 AI 명령형 채팅 패널
 │   ├── dashboard/
 │   │   └── components/
-│   │       └── MobileDashboardHome.tsx      # 모바일 우선 홈 대시보드
+│   │       ├── MobileDashboardHome.tsx      # 모바일 우선 홈 대시보드
+│   │       └── ScheduleCalendar.tsx         # 대시보드 업무/회의 월간 일정표
 │   ├── kanban/
 │   ├── projects/
 │   ├── my-tasks/
@@ -122,8 +123,10 @@
 │
 ├── presentation/                  # UI 계층
 │   ├── pages/
+│   │   └── FileManagementPage.tsx          # 파일관리 허브/향후 편집 도구 진입점
 │   └── components/
 │       ├── layout/
+│       │   ├── navigationConfig.ts         # 대시보드/회의자료/프로젝트 중심 메뉴 정의
 │       │   └── MobileBottomNavigation.tsx  # 모바일 하단 내비게이션
 │       └── pwa/
 │           └── PwaInstallPrompt.tsx        # PWA 설치 안내

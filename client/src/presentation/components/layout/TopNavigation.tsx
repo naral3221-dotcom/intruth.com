@@ -1,34 +1,101 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-    Menu,
+    Bell,
     ChevronDown,
     LogOut,
-    Settings,
-    Shield,
-    Home,
-    User,
-    Briefcase,
-    Users,
-    FileText,
+    Menu,
     Search,
-    Bell,
-    ClipboardCheck
+    Shield,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthRepository } from "@/di";
 import { cn } from "@/core/utils/cn";
 import { MobileMenu } from "./MobileMenu";
+import {
+    FUTURE_EDITOR_NAV_ITEM,
+    MAIN_NAV_ITEMS,
+    isNavigationItemActive,
+    type NavigationItem,
+} from "./navigationConfig";
 
-const NAV_ITEMS = [
-    { label: "홈", path: "/", icon: Home },
-    { label: "내 할일", path: "/my-tasks", icon: User },
-    { label: "칸반", path: "/tasks", icon: Briefcase },
-    { label: "프로젝트", path: "/projects", icon: Briefcase },
-    { label: "팀", path: "/team", icon: Users },
-    { label: "회의", path: "/meetings", icon: FileText },
-    { label: "셀 출석", path: "/attendance", icon: ClipboardCheck },
-];
+function DesktopNavItem({ item }: { item: NavigationItem }) {
+    const location = useLocation();
+    const active = isNavigationItemActive(location.pathname, item);
+
+    if (!item.children?.length) {
+        return (
+            <NavLink
+                to={item.path}
+                className={cn(
+                    "px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    active
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+            >
+                {item.label}
+            </NavLink>
+        );
+    }
+
+    return (
+        <div className="group relative">
+            <NavLink
+                to={item.path}
+                className={cn(
+                    "flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    active
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+            >
+                {item.label}
+                <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:rotate-180" />
+            </NavLink>
+
+            <div className="invisible absolute left-0 top-full z-50 mt-2 w-56 rounded-xl border border-border bg-card p-2 opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:opacity-100">
+                <div className="space-y-1">
+                    {item.children.map((child) => {
+                        const childActive = isNavigationItemActive(location.pathname, child);
+                        return (
+                            <NavLink
+                                key={child.path}
+                                to={child.path}
+                                className={cn(
+                                    "flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
+                                    childActive
+                                        ? "bg-primary/10 text-primary"
+                                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                )}
+                            >
+                                <child.icon className="h-4 w-4" />
+                                <span className="font-medium">{child.label}</span>
+                            </NavLink>
+                        );
+                    })}
+                </div>
+
+                <div className="mt-2 border-t border-border pt-2">
+                    <div className="flex items-start gap-3 rounded-lg px-3 py-2 text-muted-foreground/70">
+                        <FUTURE_EDITOR_NAV_ITEM.icon className="mt-0.5 h-4 w-4" />
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{FUTURE_EDITOR_NAV_ITEM.label}</span>
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold">
+                                    준비중
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-xs">
+                                {FUTURE_EDITOR_NAV_ITEM.children.join(", ")}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export function TopNavigation() {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -49,7 +116,6 @@ export function TopNavigation() {
         setUserMenuOpen(false);
     };
 
-    // Close user menu when clicking outside
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -69,7 +135,6 @@ export function TopNavigation() {
                 "shadow-sm"
             )}>
                 <nav className="max-w-[1400px] mx-auto h-full px-4 lg:px-6 flex items-center justify-between">
-                    {/* Logo */}
                     <NavLink to="/" className="flex items-center gap-2.5 shrink-0">
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground text-background shadow-sm">
                             <span className="text-sm font-black tracking-normal">IN</span>
@@ -77,28 +142,15 @@ export function TopNavigation() {
                         <span className="text-xl font-black tracking-normal text-foreground">INTRUTH</span>
                     </NavLink>
 
-                    {/* Desktop Navigation */}
                     <div className="hidden lg:flex items-center gap-0.5">
-                        {NAV_ITEMS.map((item) => (
-                            <NavLink
-                                key={item.path}
-                                to={item.path}
-                                className={({ isActive }) => cn(
-                                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                                    isActive
-                                        ? "bg-primary/10 text-primary"
-                                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                                )}
-                            >
-                                {item.label}
-                            </NavLink>
+                        {MAIN_NAV_ITEMS.map((item) => (
+                            <DesktopNavItem key={item.path} item={item} />
                         ))}
-                        {/* Admin Link */}
                         {isAdmin() && (
                             <NavLink
                                 to="/admin"
                                 className={({ isActive }) => cn(
-                                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5",
+                                    "px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5",
                                     isActive
                                         ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
                                         : "text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20"
@@ -110,38 +162,29 @@ export function TopNavigation() {
                         )}
                     </div>
 
-                    {/* Right Section */}
                     <div className="flex items-center gap-1">
-                        {/* Search Button */}
-                        <button className="hidden lg:flex items-center justify-center w-9 h-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                        <button
+                            type="button"
+                            aria-label="검색"
+                            className="hidden lg:flex items-center justify-center w-9 h-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        >
                             <Search className="w-[18px] h-[18px]" />
                         </button>
 
-                        {/* Notifications */}
-                        <button className="hidden lg:flex items-center justify-center w-9 h-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors relative">
+                        <button
+                            type="button"
+                            aria-label="알림"
+                            className="hidden lg:flex items-center justify-center w-9 h-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors relative"
+                        >
                             <Bell className="w-[18px] h-[18px]" />
                             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
                         </button>
 
-                        {/* Settings Link (Desktop) */}
-                        <NavLink
-                            to="/settings"
-                            className={({ isActive }) => cn(
-                                "hidden lg:flex items-center justify-center w-9 h-9 rounded-lg transition-colors",
-                                isActive
-                                    ? "bg-muted text-foreground"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                            )}
-                        >
-                            <Settings className="w-[18px] h-[18px]" />
-                        </NavLink>
-
-                        {/* Divider */}
                         <div className="hidden lg:block w-px h-6 bg-border mx-2" />
 
-                        {/* User Menu (Desktop) */}
                         <div className="hidden lg:block relative" ref={userMenuRef}>
                             <button
+                                type="button"
                                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                                 className={cn(
                                     "flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors",
@@ -166,7 +209,6 @@ export function TopNavigation() {
                                 )} />
                             </button>
 
-                            {/* Dropdown Menu */}
                             {userMenuOpen && (
                                 <div className="absolute right-0 top-full mt-2 w-64 bg-card rounded-xl shadow-lg border border-border overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                                     <div className="px-4 py-3 border-b border-border bg-muted/30">
@@ -191,10 +233,10 @@ export function TopNavigation() {
                                             onClick={() => setUserMenuOpen(false)}
                                             className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
                                         >
-                                            <Settings className="w-4 h-4 text-muted-foreground" />
                                             설정
                                         </NavLink>
                                         <button
+                                            type="button"
                                             onClick={handleLogout}
                                             className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/5 transition-colors"
                                         >
@@ -206,8 +248,8 @@ export function TopNavigation() {
                             )}
                         </div>
 
-                        {/* Mobile Menu Button */}
                         <button
+                            type="button"
                             onClick={() => setMobileMenuOpen(true)}
                             className="lg:hidden p-2 -mr-2 rounded-lg hover:bg-muted transition-colors"
                             aria-label="메뉴 열기"
@@ -218,7 +260,6 @@ export function TopNavigation() {
                 </nav>
             </header>
 
-            {/* Mobile Menu */}
             <MobileMenu
                 isOpen={mobileMenuOpen}
                 onClose={() => setMobileMenuOpen(false)}
