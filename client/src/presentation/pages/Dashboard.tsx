@@ -24,6 +24,29 @@ import {
     ScheduleCalendar,
 } from "@/features/dashboard";
 
+const DESKTOP_GREETINGS = [
+    {
+        title: (name: string) => `${name}님, 오늘도 좋은 흐름으로 시작해볼까요?`,
+        caption: '일정, 프로젝트, 팀의 움직임을 한 번에 정리했습니다.',
+    },
+    {
+        title: (name: string) => `${name}님, 사역의 조각들을 가지런히 모아봤어요`,
+        caption: '급한 일은 앞에 두고, 놓치기 쉬운 일정도 함께 챙깁니다.',
+    },
+    {
+        title: (name: string) => `${name}님, 오늘의 섬김 지도를 펼쳐볼 시간입니다`,
+        caption: '회의와 업무가 어디로 흘러가는지 한눈에 볼 수 있어요.',
+    },
+    {
+        title: (name: string) => `${name}님, 체크 한 번으로 오늘이 훨씬 가벼워집니다`,
+        caption: '작은 정리가 팀 전체의 평안을 만들어줍니다.',
+    },
+];
+
+function pickDesktopGreeting() {
+    return DESKTOP_GREETINGS[Math.floor(Math.random() * DESKTOP_GREETINGS.length)] || DESKTOP_GREETINGS[0];
+}
+
 // Quick Action Button Component
 function QuickActionButton({
     icon: Icon,
@@ -162,6 +185,7 @@ function TaskWidgetContent({ tasks }: { tasks: { todo: number; inProgress: numbe
 
 export function Dashboard() {
     const { user: member } = useAuthStore();
+    const [desktopGreeting] = useState(pickDesktopGreeting);
     const {
         openCreateProjectModal,
         openEditTaskModal,
@@ -219,16 +243,11 @@ export function Dashboard() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
                 >
-                    <h1 className="text-3xl font-bold text-foreground">
-                        안녕하세요, {member?.name || "사용자"}님
-                        <motion.span
-                            className="inline-block ml-2"
-                            animate={{ rotate: [0, 14, -8, 14, -4, 10, 0] }}
-                            transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3 }}
-                        >
-                            👋
-                        </motion.span>
+                    <p className="text-sm font-semibold text-primary">INTRUTH 체크인</p>
+                    <h1 className="mt-1 text-3xl font-bold text-foreground">
+                        {desktopGreeting.title(member?.name || "리더")}
                     </h1>
+                    <p className="mt-2 text-sm text-muted-foreground">{desktopGreeting.caption}</p>
                 </motion.div>
 
                 {/* Quick Actions */}

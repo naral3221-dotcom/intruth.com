@@ -39,6 +39,38 @@ interface MobileDashboardHomeProps {
   onCreateProject: () => void;
 }
 
+const HERO_MESSAGES = [
+  {
+    eyebrow: '오늘의 섬김 작전실',
+    title: (name: string) => `${name}님, 오늘도 은혜롭게 정리해볼까요?`,
+    caption: '작은 체크 하나가 사역의 평안을 만듭니다.',
+  },
+  {
+    eyebrow: 'INTRUTH 체크인',
+    title: (name: string) => `${name}님, 오늘 할 일도 차근차근 가봅시다`,
+    caption: '급한 것부터 보고, 나머지는 함께 정돈하면 됩니다.',
+  },
+  {
+    eyebrow: '오늘의 리더십 온도',
+    title: (name: string) => `${name}님, 일정은 차분하게 마음은 넉넉하게`,
+    caption: '회의와 업무 사이에 숨 쉴 틈도 챙겨둘게요.',
+  },
+  {
+    eyebrow: '섬김 준비 완료',
+    title: (name: string) => `${name}님, 오늘도 좋은 흐름을 만들어봐요`,
+    caption: '흩어진 일들을 한 화면에 모아두었습니다.',
+  },
+  {
+    eyebrow: '오늘의 사역 한눈에',
+    title: (name: string) => `${name}님, 체크만 해도 반은 정리됩니다`,
+    caption: '놓치기 쉬운 일정과 업무를 먼저 보여드릴게요.',
+  },
+];
+
+function pickHeroMessage() {
+  return HERO_MESSAGES[Math.floor(Math.random() * HERO_MESSAGES.length)] || HERO_MESSAGES[0];
+}
+
 function startOfToday() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -190,6 +222,7 @@ export function MobileDashboardHome({
   onCreateProject,
 }: MobileDashboardHomeProps) {
   const [sharingBrief, setSharingBrief] = useState(false);
+  const [heroMessage] = useState(pickHeroMessage);
 
   const focusTasks = useMemo(() => {
     const today = startOfToday();
@@ -273,10 +306,11 @@ export function MobileDashboardHome({
   return (
     <div className="space-y-5">
       <section className="rounded-lg bg-foreground px-4 py-5 text-background">
-        <p className="text-sm opacity-75">오늘의 리더십 보드</p>
+        <p className="text-sm opacity-75">{heroMessage.eyebrow}</p>
         <h1 className="mt-1 text-2xl font-bold tracking-normal">
-          {memberName || '리더'}님, 확인할 일이 있어요
+          {heroMessage.title(memberName || '리더')}
         </h1>
+        <p className="mt-2 text-sm leading-6 opacity-75">{heroMessage.caption}</p>
         <div className="mt-5 grid grid-cols-3 gap-2">
           <div className="rounded-lg bg-background/10 p-3">
             <p className="text-xl font-bold">{stats.overdue}</p>
