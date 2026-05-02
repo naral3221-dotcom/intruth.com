@@ -7,6 +7,10 @@ import type { LoginInput, LoginResult, ChangePasswordInput } from '@/domain/repo
 import { HttpClient } from './HttpClient';
 import type { TokenManager } from './HttpClient';
 
+function normalizeUserRole(role?: string): AuthUser['userRole'] {
+  return role?.toLowerCase() === 'admin' ? 'admin' : 'member';
+}
+
 export class AuthApiSource {
   constructor(
     private readonly httpClient: HttpClient,
@@ -42,7 +46,7 @@ export class AuthApiSource {
         avatarUrl: response.user.avatarUrl,
         department: response.user.department,
         position: response.user.position,
-        userRole: response.user.role as 'admin' | 'member',
+        userRole: normalizeUserRole(response.user.role),
         mustChangePassword: response.mustChangePassword,
       },
       mustChangePassword: response.mustChangePassword,
@@ -78,7 +82,7 @@ export class AuthApiSource {
       avatarUrl: response.avatarUrl,
       department: response.department,
       position: response.position,
-      userRole: response.role as 'admin' | 'member',
+      userRole: normalizeUserRole(response.role),
       mustChangePassword: response.mustChangePassword,
     };
   }
