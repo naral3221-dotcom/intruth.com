@@ -72,8 +72,8 @@ function buildCalendarEvents(tasks: Task[], meetings: Meeting[]) {
     type: 'meeting',
     title: meeting.title,
     date: new Date(meeting.meetingDate),
-    to: `/meetings?meetingId=${meeting.id}`,
-    meta: meeting.location,
+    to: `/meetings/${meeting.id}`,
+    meta: meeting.team?.name,
   }));
 
   const taskEvents: CalendarEvent[] = tasks

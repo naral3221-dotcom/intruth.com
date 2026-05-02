@@ -2,7 +2,7 @@
  * AgendaStep - 안건 관리 스텝
  * 회의 전 아젠다 등록 및 관리
  */
-import { Plus, GripVertical, Trash2, Clock, User, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/core/utils/cn';
 import type { CreateAgendaInput, AgendaStatus } from '@/types';
@@ -23,8 +23,6 @@ export function AgendaStep({ agendas, onChange }: AgendaStepProps) {
   const [formData, setFormData] = useState<CreateAgendaInput>({
     title: '',
     description: '',
-    duration: 15,
-    presenter: '',
   });
 
   const handleAdd = () => {
@@ -38,14 +36,14 @@ export function AgendaStep({ agendas, onChange }: AgendaStepProps) {
     };
 
     onChange([...agendas, newAgenda]);
-    setFormData({ title: '', description: '', duration: 15, presenter: '' });
+    setFormData({ title: '', description: '' });
     setShowForm(false);
   };
 
   const handleUpdate = (id: string) => {
     onChange(agendas.map(a => a.id === id ? { ...a, ...formData } : a));
     setEditingId(null);
-    setFormData({ title: '', description: '', duration: 15, presenter: '' });
+    setFormData({ title: '', description: '' });
   };
 
   const handleDelete = (id: string) => {
@@ -71,13 +69,9 @@ export function AgendaStep({ agendas, onChange }: AgendaStepProps) {
     setFormData({
       title: agenda.title,
       description: agenda.description,
-      duration: agenda.duration,
-      presenter: agenda.presenter,
     });
     setShowForm(false);
   };
-
-  const totalDuration = agendas.reduce((sum, a) => sum + (a.duration || 0), 0);
 
   return (
     <div className="space-y-4">
@@ -87,7 +81,7 @@ export function AgendaStep({ agendas, onChange }: AgendaStepProps) {
           <h3 className="text-sm font-medium text-foreground">안건 목록</h3>
           {agendas.length > 0 && (
             <p className="text-xs text-muted-foreground mt-1">
-              총 {agendas.length}개 안건 | 예상 소요 시간: {totalDuration}분
+              총 {agendas.length}개 안건
             </p>
           )}
         </div>
@@ -96,7 +90,7 @@ export function AgendaStep({ agendas, onChange }: AgendaStepProps) {
           onClick={() => {
             setShowForm(true);
             setEditingId(null);
-            setFormData({ title: '', description: '', duration: 15, presenter: '' });
+            setFormData({ title: '', description: '' });
           }}
           className="text-sm text-primary hover:underline flex items-center gap-1"
         >
@@ -144,41 +138,12 @@ export function AgendaStep({ agendas, onChange }: AgendaStepProps) {
                     rows={2}
                     className="aboard-input resize-none"
                   />
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground">예상 소요 시간</label>
-                      <div className="relative mt-1">
-                        <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input
-                          type="number"
-                          value={formData.duration || ''}
-                          onChange={(e) => setFormData(prev => ({ ...prev, duration: Number(e.target.value) }))}
-                          placeholder="분"
-                          min={1}
-                          className="aboard-input pl-11"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">발표자</label>
-                      <div className="relative mt-1">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input
-                          type="text"
-                          value={formData.presenter || ''}
-                          onChange={(e) => setFormData(prev => ({ ...prev, presenter: e.target.value }))}
-                          placeholder="담당자"
-                          className="aboard-input pl-11"
-                        />
-                      </div>
-                    </div>
-                  </div>
                   <div className="flex gap-2 justify-end">
                     <button
                       type="button"
                       onClick={() => {
                         setEditingId(null);
-                        setFormData({ title: '', description: '', duration: 15, presenter: '' });
+                        setFormData({ title: '', description: '' });
                       }}
                       className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
                     >
@@ -233,20 +198,6 @@ export function AgendaStep({ agendas, onChange }: AgendaStepProps) {
                         {agenda.description}
                       </p>
                     )}
-                    <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                      {agenda.duration && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {agenda.duration}분
-                        </span>
-                      )}
-                      {agenda.presenter && (
-                        <span className="flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          {agenda.presenter}
-                        </span>
-                      )}
-                    </div>
                   </div>
 
                   {/* 삭제 버튼 */}
@@ -282,41 +233,12 @@ export function AgendaStep({ agendas, onChange }: AgendaStepProps) {
             rows={2}
             className="aboard-input resize-none"
           />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground">예상 소요 시간</label>
-              <div className="relative mt-1">
-                <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="number"
-                  value={formData.duration || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, duration: Number(e.target.value) }))}
-                  placeholder="분"
-                  min={1}
-                  className="aboard-input pl-11"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">발표자</label>
-              <div className="relative mt-1">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={formData.presenter || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, presenter: e.target.value }))}
-                  placeholder="담당자"
-                  className="aboard-input pl-11"
-                />
-              </div>
-            </div>
-          </div>
           <div className="flex gap-2 justify-end">
             <button
               type="button"
               onClick={() => {
                 setShowForm(false);
-                setFormData({ title: '', description: '', duration: 15, presenter: '' });
+                setFormData({ title: '', description: '' });
               }}
               className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground min-h-[44px]"
             >

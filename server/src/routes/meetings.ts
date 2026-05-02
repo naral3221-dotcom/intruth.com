@@ -18,11 +18,12 @@ const upload = multer({
 // 회의자료 목록
 router.get('/', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { projectId, authorId, attendeeId, status, startDate, endDate, search } = req.query;
+    const { projectId, teamId, authorId, attendeeId, status, startDate, endDate, search } = req.query;
     const meetingService = getMeetingService();
 
     const meetings = await meetingService.findAll({
       projectId: projectId ? String(projectId) : undefined,
+      teamId: teamId ? String(teamId) : undefined,
       authorId: authorId ? String(authorId) : undefined,
       attendeeId: attendeeId ? String(attendeeId) : undefined,
       status: status as 'DRAFT' | 'PUBLISHED' | undefined,
@@ -53,7 +54,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response): Promis
 // 회의자료 생성
 router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { title, meetingDate, location, projectId, content, contentType, summary, attendeeIds, status, agendas, actionItems } = req.body;
+    const { title, meetingDate, location, projectId, teamId, content, contentType, summary, attendeeIds, status, agendas, actionItems } = req.body;
     const meetingService = getMeetingService();
 
     const meeting = await meetingService.create(
@@ -62,6 +63,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
         meetingDate: new Date(meetingDate),
         location,
         projectId: projectId ? String(projectId) : null,
+        teamId: teamId ? String(teamId) : null,
         content,
         contentType,
         summary,
@@ -87,7 +89,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response): Promise<
 // 회의자료 수정
 router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { title, meetingDate, location, projectId, content, contentType, summary, attendeeIds, status } = req.body;
+    const { title, meetingDate, location, projectId, teamId, content, contentType, summary, attendeeIds, status } = req.body;
     const meetingService = getMeetingService();
 
     const meeting = await meetingService.update(
@@ -97,6 +99,7 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response): Promis
         meetingDate: meetingDate ? new Date(meetingDate) : undefined,
         location,
         projectId: projectId !== undefined ? (projectId ? String(projectId) : null) : undefined,
+        teamId: teamId !== undefined ? (teamId ? String(teamId) : null) : undefined,
         content,
         contentType,
         summary,

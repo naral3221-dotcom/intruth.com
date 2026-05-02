@@ -73,6 +73,9 @@ export function useMonthlyStats(initialParams?: {
   month?: number;
 }): UseMonthlyStatsReturn {
   const attendanceRepository = useAttendanceRepository();
+  const initialCellId = initialParams?.cellId;
+  const initialYear = initialParams?.year;
+  const initialMonth = initialParams?.month;
 
   const [stats, setStats] = useState<MonthlyStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,9 +88,9 @@ export function useMonthlyStats(initialParams?: {
         setError(null);
 
         const data = await attendanceRepository.getMonthlyStats({
-          cellId: params?.cellId || initialParams?.cellId,
-          year: params?.year || initialParams?.year,
-          month: params?.month || initialParams?.month,
+          cellId: params?.cellId || initialCellId,
+          year: params?.year || initialYear,
+          month: params?.month || initialMonth,
         });
         setStats(data);
       } catch (err) {
@@ -97,7 +100,7 @@ export function useMonthlyStats(initialParams?: {
         setLoading(false);
       }
     },
-    [attendanceRepository, initialParams]
+    [attendanceRepository, initialCellId, initialMonth, initialYear]
   );
 
   useEffect(() => {

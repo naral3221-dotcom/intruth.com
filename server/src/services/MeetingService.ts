@@ -53,6 +53,7 @@ export interface CreateMeetingInput {
   meetingDate: Date;
   location?: string;
   projectId?: string | null;
+  teamId?: string | null;
   content?: string;
   contentType?: MeetingContentType;
   summary?: string;
@@ -67,6 +68,7 @@ export interface UpdateMeetingInput {
   meetingDate?: Date;
   location?: string;
   projectId?: string | null;
+  teamId?: string | null;
   content?: string;
   contentType?: MeetingContentType;
   summary?: string;
@@ -76,6 +78,7 @@ export interface UpdateMeetingInput {
 
 export interface MeetingListParams {
   projectId?: string;
+  teamId?: string;
   authorId?: string;
   attendeeId?: string;
   status?: MeetingStatus;
@@ -129,6 +132,18 @@ export class MeetingService {
   }
 
   /**
+   * 팀 정보 조회 헬퍼
+   */
+  private async getTeamInfo(teamId: string | null) {
+    if (!teamId) return null;
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: { id: true, name: true, color: true },
+    });
+    return team;
+  }
+
+  /**
    * 작성자/관리자 권한 확인
    */
   private checkPermission(authorId: string, member: MemberContext): void {
@@ -146,6 +161,7 @@ export class MeetingService {
     const where: Record<string, unknown> = {};
 
     if (params?.projectId) where.projectId = params.projectId;
+    if (params?.teamId) where.teamId = params.teamId;
     if (params?.authorId) where.authorId = params.authorId;
     if (params?.status) where.status = params.status;
 
@@ -189,6 +205,7 @@ export class MeetingService {
       meetings.map(async (meeting) => {
         const author = await this.getMemberInfo(meeting.authorId);
         const project = await this.getProjectInfo(meeting.projectId);
+        const team = await this.getTeamInfo(meeting.teamId);
         const attendeesWithMembers = await Promise.all(
           meeting.attendees.map(async (attendee) => ({
             ...attendee,
@@ -200,6 +217,7 @@ export class MeetingService {
           ...meeting,
           author,
           project,
+          team,
           attendees: attendeesWithMembers,
         };
       })
@@ -227,6 +245,7 @@ export class MeetingService {
 
     const author = await this.getMemberInfo(meeting.authorId);
     const project = await this.getProjectInfo(meeting.projectId);
+    const team = await this.getTeamInfo(meeting.teamId);
 
     const attendeesWithMembers = await Promise.all(
       meeting.attendees.map(async (attendee) => ({
@@ -254,6 +273,7 @@ export class MeetingService {
       ...meeting,
       author,
       project,
+      team,
       attendees: attendeesWithMembers,
       comments: commentsWithAuthors,
       actionItems: actionItemsWithAssignees,
@@ -274,6 +294,7 @@ export class MeetingService {
         meetingDate: input.meetingDate,
         location: input.location,
         projectId: input.projectId ?? null,
+        teamId: input.teamId ?? null,
         content: input.content,
         contentType: input.contentType || 'text',
         summary: input.summary,
@@ -317,6 +338,7 @@ export class MeetingService {
 
     const author = await this.getMemberInfo(meeting.authorId);
     const project = await this.getProjectInfo(meeting.projectId);
+    const team = await this.getTeamInfo(meeting.teamId);
 
     const attendeesWithMembers = await Promise.all(
       meeting.attendees.map(async (attendee) => ({
@@ -336,6 +358,7 @@ export class MeetingService {
       ...meeting,
       author,
       project,
+      team,
       attendees: attendeesWithMembers,
       actionItems: actionItemsWithAssignees,
     };
@@ -368,6 +391,7 @@ export class MeetingService {
         meetingDate: input.meetingDate,
         location: input.location,
         projectId: input.projectId,
+        teamId: input.teamId,
         content: input.content,
         contentType: input.contentType,
         summary: input.summary,
@@ -390,6 +414,7 @@ export class MeetingService {
 
     const author = await this.getMemberInfo(meeting.authorId);
     const project = await this.getProjectInfo(meeting.projectId);
+    const team = await this.getTeamInfo(meeting.teamId);
 
     const attendeesWithMembers = await Promise.all(
       meeting.attendees.map(async (attendee) => ({
@@ -402,6 +427,7 @@ export class MeetingService {
       ...meeting,
       author,
       project,
+      team,
       attendees: attendeesWithMembers,
     };
   }

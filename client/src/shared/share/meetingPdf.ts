@@ -60,8 +60,7 @@ function renderList(title: string, items?: string[]) {
 function buildMeetingPdfHtml(meeting: Meeting) {
   const attendeeNames = meeting.attendees?.map((attendee) => attendee.member?.name).filter(Boolean) || [];
   const agendaItems = meeting.agendas?.map((agenda) => {
-    const meta = [agenda.presenter, agenda.duration ? `${agenda.duration}분` : ''].filter(Boolean).join(' · ');
-    return `${agenda.title}${meta ? ` (${meta})` : ''}${agenda.description ? ` - ${agenda.description}` : ''}`;
+    return `${agenda.title}${agenda.description ? ` - ${agenda.description}` : ''}`;
   });
   const actionItems = meeting.actionItems?.map((item) => {
     const assignee = item.assignee?.name ? ` / 담당: ${item.assignee.name}` : '';
@@ -76,7 +75,7 @@ function buildMeetingPdfHtml(meeting: Meeting) {
         <h1>${escapeHtml(meeting.title)}</h1>
         <dl>
           ${renderInfo('일시', formatDate(meeting.meetingDate))}
-          ${renderInfo('장소', meeting.location)}
+          ${renderInfo('팀', meeting.team?.name)}
           ${renderInfo('프로젝트', meeting.project?.name)}
           ${renderInfo('작성자', meeting.author?.name)}
         </dl>

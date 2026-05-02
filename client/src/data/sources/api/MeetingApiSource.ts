@@ -12,6 +12,7 @@ export class MeetingApiSource {
   async list(filters?: MeetingFilters): Promise<Meeting[]> {
     const searchParams = new URLSearchParams();
     if (filters?.projectId) searchParams.set('projectId', String(filters.projectId));
+    if (filters?.teamId) searchParams.set('teamId', String(filters.teamId));
     if (filters?.authorId) searchParams.set('authorId', String(filters.authorId));
     if (filters?.status) searchParams.set('status', filters.status);
     if (filters?.search) searchParams.set('search', filters.search);

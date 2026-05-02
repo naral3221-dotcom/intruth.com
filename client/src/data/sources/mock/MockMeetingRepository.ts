@@ -35,6 +35,9 @@ export class MockMeetingRepository implements IMeetingRepository {
       if (filters.projectId) {
         meetings = meetings.filter((m) => m.projectId === filters.projectId);
       }
+      if (filters.teamId) {
+        meetings = meetings.filter((m) => m.teamId === filters.teamId);
+      }
       if (filters.authorId) {
         meetings = meetings.filter((m) => m.authorId === filters.authorId);
       }
@@ -85,6 +88,7 @@ export class MockMeetingRepository implements IMeetingRepository {
     const meetings = this.getMeetings();
     const members = this.storage.members;
     const projects = this.storage.projects;
+    const teams = this.storage.teams;
     const currentMember = this.storage.getCurrentMember();
 
     const newMeetingId = Date.now();
@@ -103,6 +107,9 @@ export class MockMeetingRepository implements IMeetingRepository {
     const project = data.projectId
       ? projects.find((p) => p.id === String(data.projectId))
       : undefined;
+    const team = data.teamId
+      ? teams.find((t) => t.id === String(data.teamId))
+      : undefined;
 
     const newMeeting: Meeting = {
       id: newMeetingId,
@@ -111,6 +118,8 @@ export class MockMeetingRepository implements IMeetingRepository {
       location: data.location,
       projectId: data.projectId,
       project: project ? { id: project.id, name: project.name } : undefined,
+      teamId: data.teamId,
+      team: team ? { id: team.id, name: team.name, color: team.color } : undefined,
       content: data.content,
       summary: data.summary,
       authorId: currentMember.id,
@@ -142,6 +151,7 @@ export class MockMeetingRepository implements IMeetingRepository {
 
     const members = this.storage.members;
     const projects = this.storage.projects;
+    const teams = this.storage.teams;
 
     let attendees = meetings[index].attendees;
     if (data.attendeeIds) {
@@ -167,11 +177,22 @@ export class MockMeetingRepository implements IMeetingRepository {
       }
     }
 
+    let team = meetings[index].team;
+    if (data.teamId !== undefined) {
+      team = data.teamId
+        ? teams.find((t) => t.id === String(data.teamId))
+        : undefined;
+      if (team) {
+        team = { id: team.id, name: team.name, color: team.color };
+      }
+    }
+
     meetings[index] = {
       ...meetings[index],
       ...data,
       attendees,
       project,
+      team,
       updatedAt: new Date().toISOString(),
     };
 

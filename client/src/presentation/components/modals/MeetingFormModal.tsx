@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileText, Users, Check, Calendar, MapPin, Paperclip, Trash2, Upload } from 'lucide-react';
+import { X, FileText, Users, Check, Calendar, Paperclip, Trash2, Upload } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useMemberStore } from '@/stores/memberStore';
+import { useTeamStore } from '@/stores/teamStore';
 import { useUIStore } from '@/stores/uiStore';
 import type { MeetingStatus } from '@/types';
 
@@ -15,12 +16,13 @@ export function MeetingFormModal() {
   const { addMeeting, updateMeeting, uploadAttachments, deleteAttachment } = useMeetingStore();
   const { projects } = useProjectStore();
   const { members } = useMemberStore();
+  const { teams, fetchTeams } = useTeamStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('basic');
   const [formData, setFormData] = useState({
     title: '',
     meetingDate: '',
-    location: '',
+    teamId: '',
     projectId: '',
     content: '',
     summary: '',
@@ -39,7 +41,7 @@ export function MeetingFormModal() {
       setFormData({
         title: editingMeeting.title,
         meetingDate: editingMeeting.meetingDate.slice(0, 16), // datetime-local format
-        location: editingMeeting.location || '',
+        teamId: editingMeeting.teamId || '',
         projectId: editingMeeting.projectId || '',
         content: editingMeeting.content,
         summary: editingMeeting.summary || '',
@@ -53,7 +55,7 @@ export function MeetingFormModal() {
       setFormData({
         title: '',
         meetingDate: now.toISOString().slice(0, 16),
-        location: '',
+        teamId: '',
         projectId: '',
         content: '',
         summary: '',
@@ -65,6 +67,12 @@ export function MeetingFormModal() {
     setActiveTab('basic');
     setError(null);
   }, [editingMeeting, isMeetingModalOpen]);
+
+  useEffect(() => {
+    if (isMeetingModalOpen) {
+      void fetchTeams();
+    }
+  }, [fetchTeams, isMeetingModalOpen]);
 
   const toggleAttendee = (memberId: string) => {
     setFormData(prev => ({
@@ -131,7 +139,7 @@ export function MeetingFormModal() {
       const meetingData = {
         title: formData.title.trim(),
         meetingDate: new Date(formData.meetingDate).toISOString(),
-        location: formData.location.trim() || undefined,
+        teamId: formData.teamId || undefined,
         projectId: formData.projectId || undefined,
         content: formData.content,
         summary: formData.summary.trim() || undefined,
@@ -283,19 +291,21 @@ export function MeetingFormModal() {
                       />
                     </div>
 
-                    {/* 장소 */}
+                    {/* 팀 */}
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">장소</label>
-                      <div className="relative">
-                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                        <input
-                          type="text"
-                          value={formData.location}
-                          onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                          placeholder="예: 회의실 A, Zoom 등"
-                          className="aboard-input pl-12"
-                        />
-                      </div>
+                      <label className="block text-sm font-medium text-foreground mb-2">팀</label>
+                      <select
+                        value={formData.teamId}
+                        onChange={(e) => setFormData(prev => ({ ...prev, teamId: e.target.value }))}
+                        className="aboard-input"
+                      >
+                        <option value="">팀 선택 (선택사항)</option>
+                        {teams.map((team) => (
+                          <option key={team.id} value={team.id}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     {/* 프로젝트 */}

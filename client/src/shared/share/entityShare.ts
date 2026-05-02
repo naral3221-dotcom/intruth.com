@@ -129,13 +129,14 @@ export async function shareProject(project: Project) {
 export async function shareMeeting(meeting: Meeting) {
   const when = formatDate(meeting.meetingDate);
   const attendees = meeting.attendees?.map((attendee) => attendee.member?.name).filter(Boolean).join(', ');
-  const url = createShareUrl(`/meetings?meetingId=${meeting.id}`);
+  const url = createShareUrl(`/meetings/${meeting.id}`);
   const summary = compact(stripHtml(meeting.summary || meeting.content) || '회의자료를 확인해주세요.');
+  const teamText = meeting.team?.name ? ` · ${meeting.team.name}` : '';
 
   return resultPath(
     await shareKakaoText({
       title: meeting.title,
-      text: `[회의] ${meeting.title}\n${when}${meeting.location ? ` · ${meeting.location}` : ''}\n${attendees ? `참석: ${attendees}\n` : ''}${summary}`,
+      text: `[회의] ${meeting.title}\n${when}${teamText}\n${attendees ? `참석: ${attendees}\n` : ''}${summary}`,
       url,
       buttonTitle: '회의 보기',
       serverCallbackArgs: {

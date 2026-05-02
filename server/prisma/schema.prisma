@@ -39,6 +39,8 @@ model Member {
   role                 Role             @relation(fields: [roleId], references: [id])
   ownedProjects        Project[]        @relation("ProjectOwner")
   projectMemberships   ProjectMember[]
+  ledTeams             Team[]           @relation("TeamLeader")
+  teamMemberships      TeamMember[]
   assignedTasks        Task[]           @relation("TaskAssignee")
   reportedTasks        Task[]           @relation("TaskReporter")
   comments             Comment[]
@@ -89,6 +91,38 @@ model ProjectMember {
 
   @@unique([projectId, memberId])
   @@map("project_members")
+}
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  color       String   @default("#06b6d4")
+  leaderId    String?  @map("leader_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  leader   Member?      @relation("TeamLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  members  TeamMember[]
+  meetings Meeting[]
+
+  @@index([leaderId])
+  @@map("wf_teams")
+}
+
+model TeamMember {
+  id       String   @id @default(uuid())
+  teamId   String   @map("team_id")
+  memberId String   @map("member_id")
+  role     String   @default("MEMBER") // LEADER, MEMBER
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, memberId])
+  @@index([memberId])
+  @@map("wf_team_members")
 }
 
 model Task {
@@ -182,6 +216,7 @@ model Meeting {
   meetingDate DateTime @map("meeting_date")
   location    String?
   projectId   String?  @map("project_id")
+  teamId      String?  @map("team_id")
   content     String
   contentType String   @default("text") @map("content_type") // text, json (TipTap)
   summary     String?
@@ -197,7 +232,9 @@ model Meeting {
   actionItems    MeetingActionItem[]
   recordings     MeetingRecording[]
   materialDrafts MeetingMaterialDraft[]
+  team           Team?                  @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
+  @@index([teamId])
   @@map("wf_meetings")
 }
 

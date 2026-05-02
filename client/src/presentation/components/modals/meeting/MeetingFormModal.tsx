@@ -21,6 +21,8 @@ import { cn } from '@/core/utils/cn';
 import { useMeetingStore } from '@/stores/meetingStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useMemberStore } from '@/stores/memberStore';
+import { useTeamStore } from '@/stores/teamStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import type { MeetingStatus, CreateAgendaInput, CreateActionItemInput } from '@/types';
 
@@ -66,12 +68,14 @@ export function MeetingFormModal() {
   const { addMeeting, updateMeeting, uploadAttachments, deleteAttachment } = useMeetingStore();
   const { projects } = useProjectStore();
   const { members } = useMemberStore();
+  const { teams, teamMembers, fetchTeams, fetchTeamMembers } = useTeamStore();
+  const { user } = useAuthStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('basic');
   const [formData, setFormData] = useState({
     title: '',
     meetingDate: '',
-    location: '',
+    teamId: '',
     projectId: '',
     content: '',
     contentType: 'text' as 'text' | 'json',
@@ -93,7 +97,7 @@ export function MeetingFormModal() {
       setFormData({
         title: editingMeeting.title,
         meetingDate: editingMeeting.meetingDate.slice(0, 16),
-        location: editingMeeting.location || '',
+        teamId: editingMeeting.teamId || '',
         projectId: editingMeeting.projectId || '',
         content: editingMeeting.content,
         contentType: editingMeeting.contentType || 'text',
@@ -122,7 +126,7 @@ export function MeetingFormModal() {
       setFormData({
         title: '',
         meetingDate: now.toISOString().slice(0, 16),
-        location: '',
+        teamId: '',
         projectId: '',
         content: '',
         contentType: 'text',
@@ -137,6 +141,33 @@ export function MeetingFormModal() {
     setActiveTab('basic');
     setError(null);
   }, [editingMeeting, isMeetingModalOpen]);
+
+  useEffect(() => {
+    if (isMeetingModalOpen) {
+      void fetchTeams();
+    }
+  }, [fetchTeams, isMeetingModalOpen]);
+
+  useEffect(() => {
+    if (!isMeetingModalOpen || teams.length === 0) return;
+
+    teams.forEach((team) => {
+      if (!teamMembers.has(team.id)) {
+        void fetchTeamMembers(team.id);
+      }
+    });
+  }, [fetchTeamMembers, isMeetingModalOpen, teamMembers, teams]);
+
+  const visibleTeams = useMemo(() => {
+    if (!user) return teams;
+
+    const myTeams = teams.filter((team) => (
+      team.leaderId === user.id ||
+      (teamMembers.get(team.id) || []).some((member) => member.memberId === user.id)
+    ));
+
+    return myTeams.length > 0 ? myTeams : teams;
+  }, [teamMembers, teams, user]);
 
   // 폼 필드 변경 핸들러
   const handleFieldChange = (field: string, value: unknown) => {
@@ -220,7 +251,7 @@ export function MeetingFormModal() {
       const meetingData = {
         title: formData.title.trim(),
         meetingDate: new Date(formData.meetingDate).toISOString(),
-        location: formData.location.trim() || undefined,
+        teamId: formData.teamId || undefined,
         projectId: formData.projectId || undefined,
         content: formData.content,
         contentType: formData.contentType,
@@ -232,8 +263,6 @@ export function MeetingFormModal() {
           agendas: agendas.map(a => ({
             title: a.title,
             description: a.description,
-            duration: a.duration,
-            presenter: a.presenter,
             order: a.order,
           })),
           actionItems: actionItems.map(item => ({
@@ -406,12 +435,13 @@ export function MeetingFormModal() {
 
                 {/* Tab Content */}
                 {activeTab === 'basic' && (
-                  <BasicInfoStep
-                    formData={formData}
-                    onChange={handleFieldChange}
-                    projects={projects}
-                    members={members}
-                  />
+                <BasicInfoStep
+                  formData={formData}
+                  onChange={handleFieldChange}
+                  projects={projects}
+                  teams={visibleTeams}
+                  members={members}
+                />
                 )}
 
                 {activeTab === 'agenda' && (

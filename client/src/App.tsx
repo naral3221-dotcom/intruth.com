@@ -36,6 +36,9 @@ const TeamPage = lazy(() =>
 const MeetingsPage = lazy(() =>
     import("@/presentation/pages/MeetingsPage").then(m => ({ default: m.MeetingsPage }))
 );
+const MeetingDocumentPage = lazy(() =>
+    import("@/presentation/pages/MeetingDocumentPage").then(m => ({ default: m.MeetingDocumentPage }))
+);
 const SettingsPage = lazy(() =>
     import("@/presentation/pages/SettingsPage").then(m => ({ default: m.SettingsPage }))
 );
@@ -154,6 +157,11 @@ function AuthenticatedApp() {
                     <Route path="/meetings" element={
                         <Suspense fallback={<PageLoader />}>
                             <MeetingsPage />
+                        </Suspense>
+                    } />
+                    <Route path="/meetings/:meetingId" element={
+                        <Suspense fallback={<PageLoader />}>
+                            <MeetingDocumentPage />
                         </Suspense>
                     } />
                     <Route path="/gantt" element={

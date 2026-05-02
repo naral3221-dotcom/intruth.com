@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -10,7 +10,6 @@ import {
   RefreshCw,
   Paperclip,
   MessageSquare,
-  MapPin,
   ChevronDown,
   Clock,
   Share2,
@@ -43,29 +42,15 @@ export function MeetingsPage() {
   const { members } = useMemberStore();
   const {
     openCreateMeetingModal,
-    openMeetingDetailModal,
   } = useUIStore();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchMeetings();
   }, [fetchMeetings]);
-
-  useEffect(() => {
-    const meetingId = Number(searchParams.get("meetingId"));
-    if (!meetingId || loading || meetings.length === 0) return;
-
-    const linkedMeeting = meetings.find((meeting) => meeting.id === meetingId);
-    if (!linkedMeeting) return;
-
-    openMeetingDetailModal(linkedMeeting);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete("meetingId");
-    setSearchParams(nextParams, { replace: true });
-  }, [loading, meetings, openMeetingDetailModal, searchParams, setSearchParams]);
 
   const notifyShareResult = (result: ShareResult) => {
     if (result === "kakao" || result === "native") {
@@ -341,7 +326,7 @@ export function MeetingsPage() {
                 key={meeting.id}
                 meeting={meeting}
                 index={index}
-                onClick={() => openMeetingDetailModal(meeting)}
+                onClick={() => navigate(`/meetings/${meeting.id}`)}
                 onShare={() => void handleShareMeeting(meeting)}
               />
             ))}
@@ -394,16 +379,15 @@ function MeetingCard({ meeting, index, onClick, onShare }: MeetingCardProps) {
             )}
           </div>
 
-          {/* Date & Location */}
+          {/* Date & Team */}
           <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
             <span className="flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" />
               {format(meetingDate, "M월 d일 (EEE) HH:mm", { locale: ko })}
             </span>
-            {meeting.location && (
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5" />
-                {meeting.location}
+            {meeting.team && (
+              <span className="truncate">
+                {meeting.team.name}
               </span>
             )}
           </div>

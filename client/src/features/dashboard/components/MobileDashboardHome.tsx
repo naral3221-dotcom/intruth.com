@@ -192,7 +192,7 @@ function TaskRow({ task }: { task: Task }) {
 function MeetingRow({ meeting }: { meeting: Meeting }) {
   return (
     <Link
-      to={`/meetings?meetingId=${meeting.id}`}
+      to={`/meetings/${meeting.id}`}
       className="flex items-center gap-3 rounded-lg border border-border bg-card p-3"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-cyan-700">
@@ -202,7 +202,7 @@ function MeetingRow({ meeting }: { meeting: Meeting }) {
         <p className="truncate text-sm font-semibold text-foreground">{meeting.title}</p>
         <p className="truncate text-xs text-muted-foreground">
           {formatShortDate(meeting.meetingDate)}
-          {meeting.location ? ` · ${meeting.location}` : ''}
+          {meeting.team?.name ? ` · ${meeting.team.name}` : ''}
         </p>
       </div>
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -267,7 +267,6 @@ export function MobileDashboardHome({
       .sort((a, b) => new Date(a.meetingDate).getTime() - new Date(b.meetingDate).getTime());
   }, [meetings]);
 
-  const todayTaskCount = myTasks.filter((task) => isToday(task.dueDate)).length;
   const projectCompletion = projectStats.total
     ? Math.round((projectStats.completed / projectStats.total) * 100)
     : 0;
@@ -311,20 +310,6 @@ export function MobileDashboardHome({
           {heroMessage.title(memberName || '리더')}
         </h1>
         <p className="mt-2 text-sm leading-6 opacity-75">{heroMessage.caption}</p>
-        <div className="mt-5 grid grid-cols-3 gap-2">
-          <div className="rounded-lg bg-background/10 p-3">
-            <p className="text-xl font-bold">{stats.overdue}</p>
-            <p className="text-xs opacity-75">지연</p>
-          </div>
-          <div className="rounded-lg bg-background/10 p-3">
-            <p className="text-xl font-bold">{todayTaskCount}</p>
-            <p className="text-xs opacity-75">오늘</p>
-          </div>
-          <div className="rounded-lg bg-background/10 p-3">
-            <p className="text-xl font-bold">{upcomingMeetings.length}</p>
-            <p className="text-xs opacity-75">회의</p>
-          </div>
-        </div>
       </section>
 
       <ScheduleCalendar tasks={myTasks} meetings={meetings} compact />

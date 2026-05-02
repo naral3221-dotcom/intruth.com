@@ -123,6 +123,7 @@
 │
 ├── presentation/                  # UI 계층
 │   ├── pages/
+│   │   ├── MeetingDocumentPage.tsx         # 회의자료 고유 링크 페이지
 │   │   └── FileManagementPage.tsx          # 파일관리 허브/향후 편집 도구 진입점
 │   └── components/
 │       ├── layout/
@@ -192,7 +193,7 @@
 │   ├── projects.ts
 │   ├── members.ts
 │   ├── ai.ts                      # AI 회의 녹음/전사/회의자료 생성
-│   ├── teams.ts                   # 팀 API 조회 호환 라우트
+│   ├── teams.ts                   # Team/TeamMember DB 기반 팀 API
 │   ├── routineTasks.ts            # 루틴 업무 API 조회 호환 라우트
 │   └── ...
 │
@@ -371,12 +372,15 @@ OPENAI_ASSISTANT_OUTPUT_COST_PER_1M= # 선택: 비용 추정용 출력 단가
 - [x] AI 회의 녹음 업로드/전사 기반 1차 구현
 - [x] AI 회의자료 초안 생성 및 회의 요약/액션아이템 반영
 - [x] AI 계정별 명령 로그/압축 메모리 및 프롬프트 캐시 키 기반 구축
+- [x] Team/TeamMember DB 기반 팀 API 및 회의자료 팀 연결
+- [x] 회의자료 고유 링크 페이지(`/meetings/:meetingId`) 및 Notion형 문서 진입 구조
+- [x] 브라우저 직접 녹음, 자동 전사, AI 회의자료 초안 자동 생성 흐름
 
 **향후 작업:**
 - [ ] OneDriveStorageService 구현 (서버 배포 시)
 - [ ] Kakao Developers 앱 JavaScript 키/도메인/공유 설정
 - [ ] 서버 기반 자료 공유 링크 및 장기 저장 설계
-- [ ] AI 회의자료 승인 워크플로우 및 일반 업무 자동 생성
+- [ ] AI 회의자료 승인 UX 고도화 및 업무 전환 화면 확장
 
 ---
 

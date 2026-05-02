@@ -285,6 +285,8 @@ export interface Meeting {
   location?: string;
   projectId?: string;
   project?: { id: string; name: string };
+  teamId?: string;
+  team?: { id: string; name: string; color?: string };
   content: string;
   contentType?: MeetingContentType;
   summary?: string;
@@ -632,6 +634,7 @@ export interface CreateMeetingInput {
   meetingDate: string;
   location?: string;
   projectId?: string;
+  teamId?: string;
   content: string;
   contentType?: MeetingContentType;
   summary?: string;
@@ -646,6 +649,7 @@ export interface UpdateMeetingInput {
   meetingDate?: string;
   location?: string;
   projectId?: string;
+  teamId?: string;
   content?: string;
   contentType?: MeetingContentType;
   summary?: string;
@@ -655,6 +659,7 @@ export interface UpdateMeetingInput {
 
 export interface MeetingFilters {
   projectId?: string;
+  teamId?: string;
   authorId?: string;
   attendeeId?: string;
   status?: MeetingStatus;

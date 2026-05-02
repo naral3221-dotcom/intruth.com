@@ -11,7 +11,6 @@ import {
   FileDown,
   FileText,
   Loader2,
-  MapPin,
   MessageCircle,
   MessageSquare,
   Mic,
@@ -110,6 +109,12 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatElapsedSeconds(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
 function formatDateForInput(value?: string | null) {
   if (!value) return '';
 
@@ -173,10 +178,22 @@ export function MeetingDetailModal() {
   const [createdTasksForShare, setCreatedTasksForShare] = useState<Task[]>([]);
   const [sharingCreatedTasks, setSharingCreatedTasks] = useState(false);
   const [appliedKakaoBrief, setAppliedKakaoBrief] = useState<string | null>(null);
+  const [browserRecorder, setBrowserRecorder] = useState<MediaRecorder | null>(null);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
+  const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState(0);
   const recordingInputRef = useRef<HTMLInputElement>(null);
+  const browserRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<BlobPart[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
   const meeting = viewingMeeting;
   const aiServerEnabled = import.meta.env.VITE_USE_MOCK !== 'true';
+  const canUseBrowserRecording =
+    typeof window !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    Boolean(navigator.mediaDevices?.getUserMedia) &&
+    'MediaRecorder' in window;
+  const isBrowserRecording = browserRecorder?.state === 'recording';
 
   const openDraft = useMemo(() => {
     const draftById = activeDraftId
@@ -267,6 +284,23 @@ export function MeetingDetailModal() {
   }, [fetchMembers, isMeetingDetailModalOpen, members.length]);
 
   useEffect(() => {
+    if (!isBrowserRecording || !recordingStartedAt) return;
+
+    const interval = window.setInterval(() => {
+      setRecordingElapsedSeconds(Math.floor((Date.now() - recordingStartedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [isBrowserRecording, recordingStartedAt]);
+
+  useEffect(() => () => {
+    if (browserRecorderRef.current?.state === 'recording') {
+      browserRecorderRef.current.stop();
+    }
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  useEffect(() => {
     setActionItemTaskDrafts((current) => {
       if (!isMeetingDetailModalOpen || !meeting?.id) {
         return Object.keys(current).length > 0 ? {} : current;
@@ -307,6 +341,9 @@ export function MeetingDetailModal() {
   }, [convertibleActionItemSignature, isMeetingDetailModalOpen, meeting?.id]);
 
   const handleClose = () => {
+    if (browserRecorderRef.current?.state === 'recording') {
+      browserRecorderRef.current.stop();
+    }
     closeMeetingDetailModal();
     setCommentContent('');
     setAppliedKakaoBrief(null);
@@ -412,6 +449,45 @@ export function MeetingDetailModal() {
     }
   };
 
+  const autoCreateDraftFromRecording = async (recording: MeetingRecording) => {
+    if (!meeting) return;
+
+    setTranscribingRecordingId(recording.id);
+    setRecordings((prev) => prev.map((item) => (
+      item.id === recording.id ? { ...item, status: 'TRANSCRIBING', errorMessage: null } : item
+    )));
+
+    try {
+      const transcribedRecording = await transcribeMeetingRecording(recording.id);
+      setRecordings((prev) => prev.map((item) => (
+        item.id === transcribedRecording.id ? transcribedRecording : item
+      )));
+      toast.success('회의 녹음을 전사했습니다.');
+    } catch (error) {
+      const message = (error as Error).message;
+      setRecordings((prev) => prev.map((item) => (
+        item.id === recording.id ? { ...item, status: 'FAILED', errorMessage: message } : item
+      )));
+      toast.error('전사에 실패했습니다.', message);
+      setTranscribingRecordingId(null);
+      return;
+    }
+
+    setTranscribingRecordingId(null);
+    setCreatingDraft(true);
+
+    try {
+      const result = await createMeetingMaterialDraft(meeting.id);
+      setMaterialDrafts((prev) => [result.draft, ...prev]);
+      setActiveDraftId(result.draft.id);
+      toast.success('AI 회의자료 초안을 만들었습니다.', `녹음 ${result.recordingCount}개를 반영했습니다.`);
+    } catch (error) {
+      toast.error('AI 초안 생성에 실패했습니다.', (error as Error).message);
+    } finally {
+      setCreatingDraft(false);
+    }
+  };
+
   const handleRecordingUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -422,11 +498,86 @@ export function MeetingDetailModal() {
       const recording = await uploadMeetingRecording(meeting.id, file);
       setRecordings((prev) => [recording, ...prev]);
       toast.success('녹음 파일을 업로드했습니다.');
+      void autoCreateDraftFromRecording(recording);
     } catch (error) {
       toast.error('녹음 업로드에 실패했습니다.', (error as Error).message);
     } finally {
       setUploadingRecording(false);
     }
+  };
+
+  const handleStartBrowserRecording = async () => {
+    if (!meeting) return;
+
+    if (!canUseBrowserRecording) {
+      toast.info('이 기기에서는 바로 녹음을 지원하지 않습니다.', '녹음 파일 업로드를 사용해주세요.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+      recordingChunksRef.current = [];
+      recordingStreamRef.current = stream;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const type = recorder.mimeType || mimeType || 'audio/webm';
+        const extension = type.includes('mp4') ? 'm4a' : 'webm';
+        const blob = new Blob(recordingChunksRef.current, { type });
+
+        stream.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        browserRecorderRef.current = null;
+        setBrowserRecorder(null);
+        setRecordingStartedAt(null);
+
+        if (blob.size === 0) {
+          setRecordingElapsedSeconds(0);
+          toast.error('녹음 파일이 비어 있습니다.');
+          return;
+        }
+
+        setUploadingRecording(true);
+        try {
+          const file = new File([blob], `meeting-${meeting.id}-${Date.now()}.${extension}`, { type });
+          const recording = await uploadMeetingRecording(meeting.id, file);
+          setRecordings((prev) => [recording, ...prev]);
+          toast.success('회의 녹음을 저장했습니다.', '전사와 AI 초안을 바로 시작합니다.');
+          void autoCreateDraftFromRecording(recording);
+        } catch (error) {
+          toast.error('녹음 저장에 실패했습니다.', (error as Error).message);
+        } finally {
+          setUploadingRecording(false);
+          setRecordingElapsedSeconds(0);
+        }
+      };
+
+      recorder.start(1000);
+      browserRecorderRef.current = recorder;
+      setBrowserRecorder(recorder);
+      setRecordingStartedAt(Date.now());
+      setRecordingElapsedSeconds(0);
+      toast.success('녹음을 시작했습니다.');
+    } catch (error) {
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+      toast.error('녹음을 시작하지 못했습니다.', (error as Error).message);
+    }
+  };
+
+  const handleStopBrowserRecording = () => {
+    const recorder = browserRecorderRef.current;
+    if (!recorder || recorder.state !== 'recording') return;
+    recorder.stop();
   };
 
   const handleTranscribeRecording = async (recordingId: number) => {
@@ -641,10 +792,10 @@ export function MeetingDetailModal() {
                         <Calendar className="h-4 w-4" />
                         {format(meetingDate, 'yyyy년 M월 d일 (EEE) HH:mm', { locale: ko })}
                       </span>
-                      {meeting.location && (
+                      {meeting.team && (
                         <span className="flex items-center gap-1">
-                          <MapPin className="h-4 w-4" />
-                          {meeting.location}
+                          <Users className="h-4 w-4" />
+                          {meeting.team.name}
                         </span>
                       )}
                       {meeting.project && (
@@ -785,6 +936,24 @@ export function MeetingDetailModal() {
                     <div className="grid grid-cols-2 gap-2 sm:flex">
                       <button
                         type="button"
+                        onClick={() => (isBrowserRecording ? handleStopBrowserRecording() : void handleStartBrowserRecording())}
+                        disabled={!aiServerEnabled || uploadingRecording || !canUseBrowserRecording}
+                        className={cn(
+                          'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:opacity-60',
+                          isBrowserRecording
+                            ? 'border border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                            : 'border border-border bg-card text-foreground hover:bg-muted'
+                        )}
+                      >
+                        {uploadingRecording ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Mic className="h-4 w-4" />
+                        )}
+                        {isBrowserRecording ? `녹음 종료 ${formatElapsedSeconds(recordingElapsedSeconds)}` : '바로 녹음'}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => recordingInputRef.current?.click()}
                         disabled={!aiServerEnabled || uploadingRecording}
                         className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-60"
@@ -803,6 +972,12 @@ export function MeetingDetailModal() {
                       </button>
                     </div>
                   </div>
+
+                  {!canUseBrowserRecording && aiServerEnabled && (
+                    <p className="text-xs text-muted-foreground">
+                      이 기기에서는 바로 녹음을 지원하지 않아 녹음 파일 업로드를 사용할 수 있습니다.
+                    </p>
+                  )}
 
                   {!aiServerEnabled ? (
                     <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -866,14 +1041,25 @@ export function MeetingDetailModal() {
                       })}
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => recordingInputRef.current?.click()}
-                      className="flex w-full items-center gap-3 rounded-lg border border-dashed border-border bg-card p-4 text-left transition-colors hover:bg-muted"
-                    >
-                      <UploadCloud className="h-5 w-5 text-primary" />
-                      <span className="text-sm font-semibold text-foreground">회의 녹음 업로드</span>
-                    </button>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleStartBrowserRecording()}
+                        disabled={!canUseBrowserRecording || uploadingRecording}
+                        className="flex w-full items-center gap-3 rounded-lg border border-dashed border-border bg-card p-4 text-left transition-colors hover:bg-muted disabled:opacity-60"
+                      >
+                        <Mic className="h-5 w-5 text-primary" />
+                        <span className="text-sm font-semibold text-foreground">지금 바로 녹음</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => recordingInputRef.current?.click()}
+                        className="flex w-full items-center gap-3 rounded-lg border border-dashed border-border bg-card p-4 text-left transition-colors hover:bg-muted"
+                      >
+                        <UploadCloud className="h-5 w-5 text-primary" />
+                        <span className="text-sm font-semibold text-foreground">녹음 파일 업로드</span>
+                      </button>
+                    </div>
                   )}
 
                   <div className="space-y-3 rounded-xl border border-border bg-card p-4">

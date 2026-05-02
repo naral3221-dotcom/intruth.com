@@ -1,26 +1,27 @@
 /**
  * BasicInfoStep - 기본 정보 입력 스텝
- * 회의 제목, 일시, 장소, 프로젝트, 참석자
+ * 회의 제목, 일시, 팀, 프로젝트, 참석자
  */
-import { Calendar, MapPin, Users, Check, X } from 'lucide-react';
+import { Calendar, Users, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/core/utils/cn';
-import type { Member, Project } from '@/types';
+import type { Member, Project, Team } from '@/types';
 
 interface BasicInfoStepProps {
   formData: {
     title: string;
     meetingDate: string;
-    location: string;
+    teamId: string;
     projectId: string;
     attendeeIds: string[];
   };
   onChange: (field: string, value: unknown) => void;
   projects: Project[];
+  teams: Team[];
   members: Member[];
 }
 
-export function BasicInfoStep({ formData, onChange, projects, members }: BasicInfoStepProps) {
+export function BasicInfoStep({ formData, onChange, projects, teams, members }: BasicInfoStepProps) {
   const [showAttendeeDropdown, setShowAttendeeDropdown] = useState(false);
 
   const selectedAttendees = members.filter(m => formData.attendeeIds.includes(m.id));
@@ -69,19 +70,24 @@ export function BasicInfoStep({ formData, onChange, projects, members }: BasicIn
         </div>
       </div>
 
-      {/* 장소 */}
+      {/* 팀 */}
       <div>
-        <label className="block text-sm font-medium text-foreground mb-2">장소</label>
-        <div className="relative">
-          <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={formData.location}
-            onChange={(e) => onChange('location', e.target.value)}
-            placeholder="예: 회의실 A, Zoom 등"
-            className="w-full py-2.5 pr-4 pl-12 border border-border rounded-lg bg-card focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
-          />
-        </div>
+        <label className="block text-sm font-medium text-foreground mb-2">팀</label>
+        <select
+          value={formData.teamId}
+          onChange={(e) => onChange('teamId', e.target.value)}
+          className="aboard-input"
+        >
+          <option value="">팀 선택 (선택사항)</option>
+          {teams.map((team) => (
+            <option key={team.id} value={team.id}>
+              {team.name}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          내가 속한 팀을 기준으로 보여줍니다.
+        </p>
       </div>
 
       {/* 프로젝트 */}
