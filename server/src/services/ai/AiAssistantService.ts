@@ -3,6 +3,7 @@
  * 읽기 전용 사역 운영 비서
  */
 import OpenAI from 'openai';
+import { createHash } from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 import { ActivityLogService } from '../ActivityLogService.js';
@@ -88,6 +89,21 @@ export interface AiCommandMessageItem {
   route?: string | null;
   metadata?: unknown;
   createdAt: string;
+}
+
+interface AiAccountMemoryContext {
+  summary: string;
+  recentCommands: Array<{
+    role: AiCommandMessageRole;
+    content: string;
+    route: string | null;
+    createdAt: Date;
+  }>;
+  recentRuns: Array<{
+    prompt: string;
+    scopeLabel: string | null;
+    createdAt: Date;
+  }>;
 }
 
 export interface CreateAiTaskDraftActionInput extends AskAiAssistantInput {}
@@ -428,6 +444,203 @@ export class AiAssistantService {
       '참여 프로젝트:',
       projectLines.length ? projectLines.join('\n') : '- 없음',
     ].join('\n\n').slice(0, 12000);
+  }
+
+  private hashForCache(value: string, length = 12) {
+    return createHash('sha256').update(value).digest('hex').slice(0, length);
+  }
+
+  private toMemoryScopeKey(scope: AiAssistantScope) {
+    return `${scope.type}:${scope.id || 'GLOBAL'}`;
+  }
+
+  private buildPromptCacheKey(member: MemberContext, workflow: string, scope: AiAssistantScope) {
+    const memberHash = this.hashForCache(member.id);
+    const scopeHash = this.hashForCache(this.toMemoryScopeKey(scope), 10);
+    const workflowKey = workflow.replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'assistant';
+    return `intruth:${workflowKey}:m-${memberHash}:s-${scopeHash}`;
+  }
+
+  private responseCacheOptions(member: MemberContext, workflow: string, scope: AiAssistantScope, model: string) {
+    const options: Record<string, string> = {
+      prompt_cache_key: this.buildPromptCacheKey(member, workflow, scope),
+    };
+    const retention = process.env.OPENAI_PROMPT_CACHE_RETENTION;
+
+    if (retention === 'in_memory' || retention === '24h') {
+      options.prompt_cache_retention = retention;
+    }
+
+    if (process.env.OPENAI_DEBUG_PROMPT_CACHE === 'true') {
+      console.info('[ai-cache]', {
+        workflow,
+        model,
+        promptCacheKey: options.prompt_cache_key,
+        promptCacheRetention: options.prompt_cache_retention || 'default',
+      });
+    }
+
+    return options;
+  }
+
+  private staticReadOnlyInstructions() {
+    return [
+      'You are INTRUTH AI, a Korean church leadership operations assistant.',
+      'Answer in Korean with a warm, concise ministry tone.',
+      'Use only the account memory and INTRUTH context provided in this request.',
+      'Do not claim that you created, modified, deleted, or shared data unless an approved server action actually did it.',
+      'When a write action is needed, propose a reviewable next step that a human can approve.',
+      'Prefer short mobile-friendly paragraphs and concrete check points.',
+      'Keep KakaoTalk-ready summaries concise and practical.',
+    ].join('\n');
+  }
+
+  private staticTaskDraftInstructions() {
+    return [
+      'You are INTRUTH AI, a Korean church leadership task-drafting agent.',
+      'Create only draft tasks that a human can review and approve.',
+      'Never say that real tasks were created by the model response itself.',
+      'Use the provided project, candidate assignee, account memory, and INTRUTH context.',
+      'Suggest at most five concrete tasks grounded in the user request.',
+      'Use YYYY-MM-DD due dates only when the date is explicit or very clear.',
+      'Use assignee names only from the candidate list; use null when uncertain.',
+    ].join('\n');
+  }
+
+  private async collectAccountMemory(member: MemberContext, scope: AiAssistantScope): Promise<AiAccountMemoryContext> {
+    const scopeKey = this.toMemoryScopeKey(scope);
+    const [memory, recentCommands, recentRuns] = await Promise.all([
+      this.prisma.aiAssistantMemory.findUnique({
+        where: {
+          memberId_scopeKey: {
+            memberId: member.id,
+            scopeKey,
+          },
+        },
+        select: { summary: true },
+      }),
+      this.prisma.aiCommandMessage.findMany({
+        where: { memberId: member.id },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        select: {
+          role: true,
+          content: true,
+          route: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.aiAssistantRun.findMany({
+        where: { memberId: member.id, status: 'COMPLETED' },
+        orderBy: { createdAt: 'desc' },
+        take: 4,
+        select: {
+          prompt: true,
+          scopeLabel: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    return {
+      summary: memory?.summary || '',
+      recentCommands: recentCommands
+        .reverse()
+        .map((message) => ({
+          ...message,
+          role: this.normalizeCommandRole(message.role),
+          content: message.content.slice(0, 500),
+        })),
+      recentRuns: recentRuns.reverse(),
+    };
+  }
+
+  private toAccountMemoryText(memory: AiAccountMemoryContext) {
+    const sections: string[] = [];
+
+    if (memory.summary.trim()) {
+      sections.push(['Long-term account memory:', memory.summary.trim()].join('\n'));
+    }
+
+    if (memory.recentCommands.length) {
+      sections.push([
+        'Recent command chat:',
+        ...memory.recentCommands.map((message) => {
+          const role = message.role === 'user' ? 'User' : 'INTRUTH AI';
+          const route = message.route ? ` @ ${message.route}` : '';
+          return `- ${role}${route}: ${message.content.replace(/\s+/g, ' ').trim()}`;
+        }),
+      ].join('\n'));
+    }
+
+    if (memory.recentRuns.length) {
+      sections.push([
+        'Recent AI runs:',
+        ...memory.recentRuns.map((run) => `- ${run.scopeLabel || 'GLOBAL'}: ${run.prompt.replace(/\s+/g, ' ').trim()}`),
+      ].join('\n'));
+    }
+
+    return (sections.join('\n\n') || 'No saved account memory yet.').slice(0, 4500);
+  }
+
+  private compactMemorySummary(existing: string, entry: string) {
+    return [...existing.split('\n'), entry]
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(-14)
+      .join('\n')
+      .slice(0, 3500);
+  }
+
+  private async updateAccountMemory(member: MemberContext, scope: AiAssistantScope, prompt: string, result: AiAssistantResult, runId: number) {
+    const scopeKey = this.toMemoryScopeKey(scope);
+    const previous = await this.prisma.aiAssistantMemory.findUnique({
+      where: {
+        memberId_scopeKey: {
+          memberId: member.id,
+          scopeKey,
+        },
+      },
+      select: { summary: true },
+    });
+    const entry = [
+      `[${new Date().toISOString().slice(0, 10)}]`,
+      `${scope.label} (${scope.type})`,
+      `request="${prompt.replace(/\s+/g, ' ').trim().slice(0, 240)}"`,
+      result.highlights.length ? `highlights="${result.highlights.slice(0, 3).join(' / ').slice(0, 300)}"` : null,
+    ].filter(Boolean).join(' ');
+    const summary = this.compactMemorySummary(previous?.summary || '', entry);
+
+    await this.prisma.aiAssistantMemory.upsert({
+      where: {
+        memberId_scopeKey: {
+          memberId: member.id,
+          scopeKey,
+        },
+      },
+      create: {
+        memberId: member.id,
+        scopeKey,
+        scopeType: scope.type,
+        scopeId: scope.id,
+        summary,
+        facts: {
+          lastRunId: runId,
+          lastScopeLabel: scope.label,
+          sourceCounts: result.sourceCounts,
+        },
+      },
+      update: {
+        scopeType: scope.type,
+        scopeId: scope.id,
+        summary,
+        facts: {
+          lastRunId: runId,
+          lastScopeLabel: scope.label,
+          sourceCounts: result.sourceCounts,
+        },
+      },
+    });
   }
 
   private normalizePriority(value: unknown): AiTaskPriority {
@@ -838,13 +1051,21 @@ export class AiAssistantService {
 
   private estimateCostUsd(usage: AiAssistantUsageLog) {
     const inputRate = Number(process.env.OPENAI_ASSISTANT_INPUT_COST_PER_1M || 0);
+    const cachedInputRate = Number(process.env.OPENAI_ASSISTANT_CACHED_INPUT_COST_PER_1M || 0);
     const outputRate = Number(process.env.OPENAI_ASSISTANT_OUTPUT_COST_PER_1M || 0);
     const inputTokens = Number(usage.inputTokens || 0);
+    const cachedTokens = Math.min(Number(usage.cachedTokens || 0), inputTokens);
+    const uncachedInputTokens = Math.max(inputTokens - cachedTokens, 0);
     const outputTokens = Number(usage.outputTokens || 0);
 
-    if (!inputRate && !outputRate) return null;
+    if (!inputRate && !cachedInputRate && !outputRate) return null;
 
-    return Number((((inputTokens / 1_000_000) * inputRate) + ((outputTokens / 1_000_000) * outputRate)).toFixed(6));
+    const inputCost = cachedInputRate
+      ? ((uncachedInputTokens / 1_000_000) * inputRate) + ((cachedTokens / 1_000_000) * cachedInputRate)
+      : (inputTokens / 1_000_000) * inputRate;
+    const outputCost = (outputTokens / 1_000_000) * outputRate;
+
+    return Number((inputCost + outputCost).toFixed(6));
   }
 
   private extractUsage(response: { model?: string | null; usage?: any }, model: string): AiAssistantUsageLog {
@@ -854,7 +1075,7 @@ export class AiAssistantService {
       inputTokens: usage?.input_tokens ?? null,
       outputTokens: usage?.output_tokens ?? null,
       totalTokens: usage?.total_tokens ?? null,
-      cachedTokens: usage?.input_tokens_details?.cached_tokens ?? null,
+      cachedTokens: usage?.input_tokens_details?.cached_tokens ?? usage?.prompt_tokens_details?.cached_tokens ?? null,
       reasoningTokens: usage?.output_tokens_details?.reasoning_tokens ?? null,
     };
 
@@ -888,6 +1109,8 @@ export class AiAssistantService {
         status: 'COMPLETED',
       },
     });
+
+    await this.updateAccountMemory(member, scope, prompt, result, run.id).catch(() => null);
 
     return {
       ...result,
@@ -990,9 +1213,10 @@ export class AiAssistantService {
       throw new ValidationError('업무 초안은 프로젝트 또는 프로젝트가 연결된 회의 범위를 선택해야 합니다.');
     }
 
-    const [context, project] = await Promise.all([
+    const [context, project, accountMemory] = await Promise.all([
       this.collectContext(member, scope),
       this.findProjectForTaskWrite(member, scope.projectId),
+      this.collectAccountMemory(member, scope),
     ]);
     const sourceCounts = {
       tasks: context.tasks.length,
@@ -1019,16 +1243,11 @@ export class AiAssistantService {
 
         const response = await openai.responses.create({
           model,
+          ...this.responseCacheOptions(member, 'task-draft', scope, model),
           input: [
             {
               role: 'system',
-              content: [
-                '너는 INTRUTH 교회 리더십 운영 도구의 업무 초안 작성 에이전트다.',
-                '실제 업무를 생성했다고 말하지 말고, 사람이 승인할 수 있는 초안만 작성한다.',
-                '제공된 프로젝트/회의 컨텍스트와 사용자 요청에 근거해 최대 5개의 구체적인 업무를 제안한다.',
-                '마감일은 명확히 추론 가능한 경우에만 YYYY-MM-DD로 쓴다.',
-                '담당자는 후보 목록에 있는 사람 이름만 사용하고, 확실하지 않으면 null로 둔다.',
-              ].join('\n'),
+              content: this.staticTaskDraftInstructions(),
             },
             {
               role: 'user',
@@ -1039,6 +1258,9 @@ export class AiAssistantService {
                 '',
                 '담당자 후보:',
                 candidateLines,
+                '',
+                'Saved account memory:',
+                this.toAccountMemoryText(accountMemory),
                 '',
                 '현재 INTRUTH 컨텍스트:',
                 this.toContextText(context),
@@ -1249,7 +1471,10 @@ export class AiAssistantService {
   async ask(member: MemberContext, input: AskAiAssistantInput): Promise<AiAssistantResult> {
     const prompt = this.sanitizePrompt(input.prompt);
     const scope = await this.resolveScope(member, input.scope);
-    const context = await this.collectContext(member, scope);
+    const [context, accountMemory] = await Promise.all([
+      this.collectContext(member, scope),
+      this.collectAccountMemory(member, scope),
+    ]);
     const sourceCounts = {
       tasks: context.tasks.length,
       meetings: context.meetings.length,
@@ -1266,22 +1491,20 @@ export class AiAssistantService {
       const model = process.env.OPENAI_ASSISTANT_MODEL || process.env.OPENAI_MEETING_MODEL || 'gpt-4o-mini';
       const response = await openai.responses.create({
         model,
+        ...this.responseCacheOptions(member, 'readonly-assistant', scope, model),
         input: [
           {
             role: 'system',
-            content: [
-              '너는 INTRUTH 교회 리더십 운영 도구의 읽기 전용 AI 비서다.',
-              '제공된 업무/회의/프로젝트 컨텍스트만 근거로 한국어로 답한다.',
-              '업무 생성, 수정, 삭제, 일정 변경을 실제로 수행했다고 말하지 않는다.',
-              '필요하면 다음 승인 단계에서 사람이 실행할 수 있는 제안만 한다.',
-              '모바일에서 읽기 좋게 짧은 문단과 구체적인 체크 포인트를 사용한다.',
-            ].join('\n'),
+            content: this.staticReadOnlyInstructions(),
           },
           {
             role: 'user',
             content: [
               `사용자 질문: ${prompt}`,
               `조회 범위: ${scope.label} (${scope.type})`,
+              '',
+              'Saved account memory:',
+              this.toAccountMemoryText(accountMemory),
               '',
               '현재 INTRUTH 컨텍스트:',
               this.toContextText(context),

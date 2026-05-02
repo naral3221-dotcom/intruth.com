@@ -45,6 +45,7 @@ model Member {
   activityLogs         ActivityLog[]
   assistantRuns        AiAssistantRun[]
   commandMessages      AiCommandMessage[]
+  assistantMemories    AiAssistantMemory[]
   agentActions         AiAgentAction[]  @relation("AiAgentActionOwner")
   reviewedAgentActions AiAgentAction[]  @relation("AiAgentActionReviewer")
 
@@ -385,6 +386,24 @@ model AiCommandMessage {
 
   @@index([memberId, createdAt])
   @@map("wf_ai_command_messages")
+}
+
+model AiAssistantMemory {
+  id        Int      @id @default(autoincrement())
+  memberId  String   @map("member_id")
+  scopeKey  String   @map("scope_key")
+  scopeType String   @default("GLOBAL") @map("scope_type")
+  scopeId   String?  @map("scope_id")
+  summary   String   @default("")
+  facts     Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, scopeKey])
+  @@index([memberId, updatedAt])
+  @@map("wf_ai_assistant_memories")
 }
 
 model AiAgentAction {

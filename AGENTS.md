@@ -313,6 +313,11 @@ OPENAI_API_KEY=                # OpenAI API 키 (AI 전사/에이전트 기능)
 OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe  # 전사 모델
 OPENAI_TRANSCRIBE_PROMPT=      # 한국어/교회 용어 전사용 추가 문맥
 OPENAI_MEETING_MODEL=gpt-4o-mini  # 회의자료 구조화 생성 모델
+OPENAI_ASSISTANT_MODEL=gpt-4o-mini  # AI 명령/Assistant 모델
+OPENAI_PROMPT_CACHE_RETENTION=      # 선택: in_memory|24h, 비우면 모델 기본값
+OPENAI_ASSISTANT_INPUT_COST_PER_1M= # 선택: 비용 추정용 일반 입력 단가
+OPENAI_ASSISTANT_CACHED_INPUT_COST_PER_1M= # 선택: 비용 추정용 캐시 입력 단가
+OPENAI_ASSISTANT_OUTPUT_COST_PER_1M= # 선택: 비용 추정용 출력 단가
 ```
 
 ---
@@ -362,6 +367,7 @@ OPENAI_MEETING_MODEL=gpt-4o-mini  # 회의자료 구조화 생성 모델
 - [x] 모바일 홈 대시보드 및 업무/회의 딥링크 처리
 - [x] AI 회의 녹음 업로드/전사 기반 1차 구현
 - [x] AI 회의자료 초안 생성 및 회의 요약/액션아이템 반영
+- [x] AI 계정별 명령 로그/압축 메모리 및 프롬프트 캐시 키 기반 구축
 
 **향후 작업:**
 - [ ] OneDriveStorageService 구현 (서버 배포 시)
