@@ -22,6 +22,17 @@ async function parseError(response: Response) {
   return data?.error || 'AI 요청 처리에 실패했습니다.';
 }
 
+async function throwAiError(response: Response): Promise<never> {
+  if (response.status === 401) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('auth:expired'));
+    }
+    throw new Error('로그인이 만료되었습니다. 다시 로그인해주세요.');
+  }
+
+  throw new Error(await parseError(response));
+}
+
 async function requestAi(path: string, init?: RequestInit) {
   try {
     return await fetch(`${getBaseUrl()}${path}`, init);
@@ -45,7 +56,7 @@ export async function askAiAssistant(
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    await throwAiError(response);
   }
 
   return response.json();
@@ -61,7 +72,7 @@ export async function listAiAssistantRuns(limit = 8): Promise<AiAssistantHistory
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    await throwAiError(response);
   }
 
   return response.json();
@@ -77,7 +88,7 @@ export async function listAiAgentActions(limit = 8): Promise<AiAgentAction[]> {
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    await throwAiError(response);
   }
 
   return response.json();
@@ -93,7 +104,7 @@ export async function listAiCommandMessages(limit = 30): Promise<AiCommandMessag
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    await throwAiError(response);
   }
 
   return response.json();
@@ -111,7 +122,7 @@ export async function saveAiCommandMessage(input: SaveAiCommandMessageInput): Pr
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    await throwAiError(response);
   }
 
   return response.json();
@@ -127,7 +138,7 @@ export async function clearAiCommandMessages(): Promise<{ deletedCount: number }
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    await throwAiError(response);
   }
 
   return response.json();
@@ -148,7 +159,7 @@ export async function createAiTaskDraftAction(
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    await throwAiError(response);
   }
 
   return response.json();
@@ -164,7 +175,7 @@ export async function approveAiAgentAction(actionId: number): Promise<ApproveAiA
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    await throwAiError(response);
   }
 
   return response.json();
@@ -180,7 +191,7 @@ export async function rejectAiAgentAction(actionId: number): Promise<AiAgentActi
   });
 
   if (!response.ok) {
-    throw new Error(await parseError(response));
+    await throwAiError(response);
   }
 
   return response.json();
