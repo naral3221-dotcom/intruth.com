@@ -169,9 +169,12 @@ function isAgentExecutionCommand(command: string) {
     "업무",
     "할 일",
     "태스크",
+    "루틴",
+    "반복",
     "팀",
     "그룹",
     "task",
+    "routine",
   ]);
   const hasWriteVerb = containsAny(normalized, [
     "만들",
@@ -818,6 +821,7 @@ export function AgentCommandCenter() {
             result.result.meetings?.length ? `회의자료 ${result.result.meetings.length}개` : null,
             result.result.tasks?.length ? `업무 ${result.result.tasks.length}개` : null,
             result.result.teams?.length ? `팀 ${result.result.teams.length}개` : null,
+            result.result.routines?.length ? `루틴 ${result.result.routines.length}개` : null,
           ].filter(Boolean).join(", ")
         : "";
 

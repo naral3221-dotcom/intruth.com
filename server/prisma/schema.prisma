@@ -36,20 +36,23 @@ model Member {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  role                 Role             @relation(fields: [roleId], references: [id])
-  ownedProjects        Project[]        @relation("ProjectOwner")
+  role                 Role                    @relation(fields: [roleId], references: [id])
+  ownedProjects        Project[]               @relation("ProjectOwner")
   projectMemberships   ProjectMember[]
-  ledTeams             Team[]           @relation("TeamLeader")
+  ledTeams             Team[]                  @relation("TeamLeader")
   teamMemberships      TeamMember[]
-  assignedTasks        Task[]           @relation("TaskAssignee")
-  reportedTasks        Task[]           @relation("TaskReporter")
+  assignedTasks        Task[]                  @relation("TaskAssignee")
+  reportedTasks        Task[]                  @relation("TaskReporter")
   comments             Comment[]
   activityLogs         ActivityLog[]
   assistantRuns        AiAssistantRun[]
   commandMessages      AiCommandMessage[]
   assistantMemories    AiAssistantMemory[]
-  agentActions         AiAgentAction[]  @relation("AiAgentActionOwner")
-  reviewedAgentActions AiAgentAction[]  @relation("AiAgentActionReviewer")
+  agentActions         AiAgentAction[]         @relation("AiAgentActionOwner")
+  reviewedAgentActions AiAgentAction[]         @relation("AiAgentActionReviewer")
+  createdRoutineTasks  RoutineTask[]           @relation("RoutineTaskCreator")
+  routineAssignments   RoutineTaskAssignee[]
+  routineCompletions   RoutineTaskCompletion[]
 
   // Cell 관련 관계
   ledCells           Cell[]       @relation("CellLeader")
@@ -71,10 +74,11 @@ model Project {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  owner   Member          @relation("ProjectOwner", fields: [ownerId], references: [id])
-  members ProjectMember[]
-  tasks   Task[]
-  labels  TaskLabel[]
+  owner        Member          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  members      ProjectMember[]
+  tasks        Task[]
+  labels       TaskLabel[]
+  routineTasks RoutineTask[]
 
   @@map("projects")
 }
@@ -206,6 +210,60 @@ model ActivityLog {
   member Member @relation(fields: [memberId], references: [id])
 
   @@map("activity_logs")
+}
+
+model RoutineTask {
+  id               String   @id @default(uuid())
+  title            String
+  description      String?
+  repeatType       String   @default("weekly") @map("repeat_type") // daily, weekly, custom
+  repeatDays       Int[]    @map("repeat_days")
+  projectId        String?  @map("project_id")
+  priority         String   @default("MEDIUM")
+  estimatedMinutes Int?     @map("estimated_minutes")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdById      String   @map("created_by_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  project     Project?                @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy   Member                  @relation("RoutineTaskCreator", fields: [createdById], references: [id])
+  assignees   RoutineTaskAssignee[]
+  completions RoutineTaskCompletion[]
+
+  @@index([projectId])
+  @@index([createdById])
+  @@index([isActive])
+  @@map("wf_routine_tasks")
+}
+
+model RoutineTaskAssignee {
+  id            String   @id @default(uuid())
+  routineTaskId String   @map("routine_task_id")
+  memberId      String   @map("member_id")
+  assignedAt    DateTime @default(now()) @map("assigned_at")
+
+  routineTask RoutineTask @relation(fields: [routineTaskId], references: [id], onDelete: Cascade)
+  member      Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([routineTaskId, memberId])
+  @@index([memberId])
+  @@map("wf_routine_task_assignees")
+}
+
+model RoutineTaskCompletion {
+  id            String   @id @default(uuid())
+  routineTaskId String   @map("routine_task_id")
+  date          String
+  completedById String   @map("completed_by_id")
+  completedAt   DateTime @default(now()) @map("completed_at")
+
+  routineTask RoutineTask @relation(fields: [routineTaskId], references: [id], onDelete: Cascade)
+  completedBy Member      @relation(fields: [completedById], references: [id])
+
+  @@unique([routineTaskId, date])
+  @@index([completedById])
+  @@map("wf_routine_task_completions")
 }
 
 // ==================== 회의자료 게시판 모델 ====================

@@ -11,6 +11,7 @@ import { DashboardService } from '../services/DashboardService.js';
 import { AuthService } from '../services/AuthService.js';
 import { AdminService } from '../services/AdminService.js';
 import { MeetingService } from '../services/MeetingService.js';
+import { RoutineTaskService } from '../services/RoutineTaskService.js';
 import { CellService } from '../services/CellService.js';
 import { AttendanceService } from '../services/AttendanceService.js';
 import { AiAssistantService, AiTranscriptionService } from '../services/ai/index.js';
@@ -26,6 +27,7 @@ type ServiceName =
   | 'AuthService'
   | 'AdminService'
   | 'MeetingService'
+  | 'RoutineTaskService'
   | 'StorageService'
   | 'CellService'
   | 'AttendanceService'
@@ -41,6 +43,7 @@ interface ServiceMap {
   AuthService: AuthService;
   AdminService: AdminService;
   MeetingService: MeetingService;
+  RoutineTaskService: RoutineTaskService;
   StorageService: IStorageService;
   CellService: CellService;
   AttendanceService: AttendanceService;
@@ -99,6 +102,9 @@ class Container {
     // 5. 스토리지 의존 서비스
     const meetingService = new MeetingService(prisma, storageService);
     this.instances.set('MeetingService', meetingService);
+
+    const routineTaskService = new RoutineTaskService(prisma);
+    this.instances.set('RoutineTaskService', routineTaskService);
 
     const aiTranscriptionService = new AiTranscriptionService(prisma, storageService);
     this.instances.set('AiTranscriptionService', aiTranscriptionService);
@@ -189,6 +195,10 @@ export function getAdminService(): AdminService {
 
 export function getMeetingService(): MeetingService {
   return container.resolve('MeetingService');
+}
+
+export function getRoutineTaskService(): RoutineTaskService {
+  return container.resolve('RoutineTaskService');
 }
 
 export function getStorageService(): IStorageService {

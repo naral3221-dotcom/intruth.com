@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { ActivityLogService } from '../ActivityLogService.js';
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 
-export type AgentToolName = 'create_project' | 'create_meeting' | 'create_tasks' | 'create_team';
+export type AgentToolName = 'create_project' | 'create_meeting' | 'create_tasks' | 'create_team' | 'create_routine';
 
 export interface AgentMemberContext {
   id: string;
@@ -46,6 +46,11 @@ export interface AgentToolCallPreview {
     meetingDate?: string | null;
     content?: string | null;
     color?: string | null;
+    priority?: string | null;
+    repeatType?: string | null;
+    repeatDays?: number[];
+    estimatedMinutes?: number | null;
+    assigneeName?: string | null;
     tasks?: AgentTaskDraft[];
     agendas?: AgentAgendaDraft[];
   };
@@ -88,6 +93,8 @@ const WEEKDAY_OFFSETS: Record<string, number> = {
   금요일: 5,
   토요일: 6,
 };
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+const WEEKDAYS = [1, 2, 3, 4, 5];
 
 function compactWhitespace(value: string) {
   return value.replace(/\s+/g, ' ').trim();
@@ -131,6 +138,11 @@ export class AgentToolRegistry {
       {
         name: 'create_team',
         description: '새 팀을 생성하고 리더를 팀 멤버로 등록합니다.',
+        approvalRequired: true,
+      },
+      {
+        name: 'create_routine',
+        description: '반복 업무 루틴을 생성합니다. 요일, 프로젝트, 담당자 이름, 예상 시간을 함께 지정할 수 있습니다.',
         approvalRequired: true,
       },
     ];
@@ -208,6 +220,36 @@ export class AgentToolRegistry {
     return toIsoDateTime(addDays(now, 1), 19, 30);
   }
 
+  private parseRepeatDays(prompt: string) {
+    if (/매일|매일마다|날마다|daily/.test(prompt)) {
+      return { repeatType: 'daily', repeatDays: ALL_DAYS };
+    }
+
+    if (/평일|월-금|월~금|weekday/.test(prompt)) {
+      return { repeatType: 'weekly', repeatDays: WEEKDAYS };
+    }
+
+    const shortDays: Array<[RegExp, number]> = [
+      [/일요일|주일/, 0],
+      [/월요일|월요|월\b/, 1],
+      [/화요일|화요|화\b/, 2],
+      [/수요일|수요|수\b/, 3],
+      [/목요일|목요|목\b/, 4],
+      [/금요일|금요|금\b/, 5],
+      [/토요일|토요|토\b/, 6],
+    ];
+    const days = shortDays
+      .filter(([pattern]) => pattern.test(prompt))
+      .map(([, value]) => value);
+    const uniqueDays = [...new Set(days)].sort((a, b) => a - b);
+
+    if (uniqueDays.length > 0) {
+      return { repeatType: 'custom', repeatDays: uniqueDays };
+    }
+
+    return { repeatType: 'weekly', repeatDays: WEEKDAYS };
+  }
+
   private inferTitle(prompt: string, fallback: string) {
     const quoted = prompt.match(/["'“”‘’](.+?)["'“”‘’]/);
     if (quoted?.[1]) return compactWhitespace(quoted[1]).slice(0, 80);
@@ -262,6 +304,7 @@ export class AgentToolRegistry {
     const wantsMeeting = /회의|회의자료|회의록|미팅|meeting/.test(normalized);
     const wantsTask = /업무|할 일|태스크|액션|task|todo/.test(normalized);
     const wantsTeam = /팀|그룹|team|group/.test(normalized);
+    const wantsRoutine = /루틴|반복|정기|routine|recurring/.test(normalized);
 
     if (wantsTeam && wantsCreate) {
       const title = this.inferTitle(prompt, '새 팀');
@@ -309,7 +352,28 @@ export class AgentToolRegistry {
       });
     }
 
-    if (wantsTask && wantsCreate) {
+    if (wantsRoutine && wantsCreate) {
+      const title = this.inferTitle(prompt, '새 루틴');
+      const repeat = this.parseRepeatDays(prompt);
+      tools.push({
+        id: `tool-${tools.length + 1}`,
+        toolName: 'create_routine',
+        label: '루틴 생성',
+        summary: `"${title}" 반복 루틴을 생성합니다.`,
+        args: {
+          title,
+          description: 'AI 에이전트가 제안한 반복 업무 루틴입니다.',
+          projectId: projectId || null,
+          priority: 'MEDIUM',
+          repeatType: repeat.repeatType,
+          repeatDays: repeat.repeatDays,
+          estimatedMinutes: null,
+          assigneeName: null,
+        },
+      });
+    }
+
+    if (wantsTask && wantsCreate && !wantsRoutine) {
       const tasks = this.buildTaskDrafts(prompt);
       tools.push({
         id: `tool-${tools.length + 1}`,
@@ -343,7 +407,7 @@ export class AgentToolRegistry {
       .map((tool, index) => {
         const candidate = tool && typeof tool === 'object' ? tool as Partial<AgentToolCallPreview> : {};
         const toolName = candidate.toolName;
-        if (!['create_project', 'create_meeting', 'create_tasks', 'create_team'].includes(String(toolName))) return null;
+        if (!['create_project', 'create_meeting', 'create_tasks', 'create_team', 'create_routine'].includes(String(toolName))) return null;
         const args = candidate.args && typeof candidate.args === 'object' ? candidate.args : {};
 
         return {
@@ -578,6 +642,93 @@ export class AgentToolRegistry {
     });
   }
 
+  private normalizeRoutineRepeat(tool: AgentToolCallPreview) {
+    const requestedType = ['daily', 'weekly', 'custom'].includes(String(tool.args.repeatType))
+      ? String(tool.args.repeatType)
+      : 'weekly';
+
+    const providedDays = Array.isArray(tool.args.repeatDays)
+      ? tool.args.repeatDays
+          .map((day) => Number(day))
+          .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+      : [];
+    const uniqueDays = [...new Set(providedDays)].sort((a, b) => a - b);
+
+    if (uniqueDays.length > 0) {
+      const isEveryDay = uniqueDays.length === 7;
+      const isWeekdays = uniqueDays.length === WEEKDAYS.length && WEEKDAYS.every((day, index) => uniqueDays[index] === day);
+      return {
+        repeatType: isEveryDay ? 'daily' : isWeekdays && requestedType === 'weekly' ? 'weekly' : 'custom',
+        repeatDays: uniqueDays,
+      };
+    }
+
+    if (requestedType === 'daily') return { repeatType: requestedType, repeatDays: ALL_DAYS };
+    if (requestedType === 'weekly') return { repeatType: requestedType, repeatDays: WEEKDAYS };
+
+    return {
+      repeatType: 'custom',
+      repeatDays: WEEKDAYS,
+    };
+  }
+
+  private normalizeEstimatedMinutes(value: unknown) {
+    if (value === undefined || value === null || value === '') return null;
+    const minutes = Number(value);
+    return Number.isFinite(minutes) && minutes >= 0 && minutes <= 1440 ? Math.round(minutes) : null;
+  }
+
+  private async executeCreateRoutine(tool: AgentToolCallPreview, member: AgentMemberContext, fallbackProjectId?: string | null) {
+    if (!this.hasPermission(member, 'task', 'create')) {
+      throw new ForbiddenError('루틴을 생성할 권한이 없습니다.');
+    }
+
+    const title = compactWhitespace(String(tool.args.title || ''));
+    if (!title) throw new ValidationError('루틴 제목이 비어 있습니다.');
+
+    const projectId = tool.args.projectId || fallbackProjectId || null;
+    let assigneeCandidates: Array<{ id: string; name: string; email: string; username: string | null; isActive: boolean }> = [];
+
+    if (projectId) {
+      const project = await this.ensureProjectWrite(projectId, member);
+      assigneeCandidates = [
+        project.owner,
+        ...project.members.map((item) => item.member),
+      ];
+    } else {
+      assigneeCandidates = await this.prisma.member.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true, email: true, username: true, isActive: true },
+        take: 100,
+      });
+    }
+
+    const assigneeId = this.matchAssigneeId(tool.args.assigneeName, assigneeCandidates) || member.id;
+    const repeat = this.normalizeRoutineRepeat(tool);
+    if (repeat.repeatDays.length === 0) {
+      throw new ValidationError('루틴 반복 요일이 비어 있습니다.');
+    }
+
+    return this.prisma.routineTask.create({
+      data: {
+        title: title.slice(0, 160),
+        description: tool.args.description ? String(tool.args.description).slice(0, 1000) : null,
+        repeatType: repeat.repeatType,
+        repeatDays: repeat.repeatDays,
+        projectId,
+        priority: this.normalizePriority(tool.args.priority),
+        estimatedMinutes: this.normalizeEstimatedMinutes(tool.args.estimatedMinutes),
+        createdById: member.id,
+        assignees: {
+          create: {
+            memberId: assigneeId,
+          },
+        },
+      },
+      select: { id: true, title: true, projectId: true, repeatType: true, repeatDays: true },
+    });
+  }
+
   async executeToolPlan(action: AgentToolActionRow, member: AgentMemberContext) {
     const preview = this.toToolPlanPreview(action.preview);
     let currentProjectId: string | null = null;
@@ -585,6 +736,7 @@ export class AgentToolRegistry {
     const createdTeams = [];
     const createdMeetings = [];
     const createdTasks = [];
+    const createdRoutines = [];
 
     for (const tool of preview.tools) {
       if (tool.toolName === 'create_project') {
@@ -608,14 +760,21 @@ export class AgentToolRegistry {
         currentProjectId = result.project.id;
         createdTasks.push(...result.tasks);
       }
+
+      if (tool.toolName === 'create_routine') {
+        const routine = await this.executeCreateRoutine(tool, member, currentProjectId);
+        if (routine.projectId) currentProjectId = routine.projectId;
+        createdRoutines.push(routine);
+      }
     }
 
     return {
-      createdCount: createdProjects.length + createdTeams.length + createdMeetings.length + createdTasks.length,
+      createdCount: createdProjects.length + createdTeams.length + createdMeetings.length + createdTasks.length + createdRoutines.length,
       projects: createdProjects,
       teams: createdTeams,
       meetings: createdMeetings,
       tasks: createdTasks,
+      routines: createdRoutines,
     };
   }
 }

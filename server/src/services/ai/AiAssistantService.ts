@@ -214,7 +214,7 @@ const AI_TOOL_PLAN_SCHEMA = {
         properties: {
           toolName: {
             type: 'string',
-            enum: ['create_project', 'create_meeting', 'create_tasks', 'create_team'],
+            enum: ['create_project', 'create_meeting', 'create_tasks', 'create_team', 'create_routine'],
           },
           label: { type: 'string' },
           summary: { type: 'string' },
@@ -231,6 +231,11 @@ const AI_TOOL_PLAN_SCHEMA = {
               'meetingDate',
               'content',
               'color',
+              'priority',
+              'repeatType',
+              'repeatDays',
+              'estimatedMinutes',
+              'assigneeName',
               'tasks',
               'agendas',
             ],
@@ -244,6 +249,15 @@ const AI_TOOL_PLAN_SCHEMA = {
               meetingDate: { type: ['string', 'null'], description: 'ISO date-time only when explicitly clear, otherwise null' },
               content: { type: ['string', 'null'] },
               color: { type: ['string', 'null'] },
+              priority: { type: ['string', 'null'], enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT', null] },
+              repeatType: { type: ['string', 'null'], enum: ['daily', 'weekly', 'custom', null] },
+              repeatDays: {
+                type: 'array',
+                maxItems: 7,
+                items: { type: 'integer', minimum: 0, maximum: 6 },
+              },
+              estimatedMinutes: { type: ['integer', 'null'], minimum: 0, maximum: 1440 },
+              assigneeName: { type: ['string', 'null'] },
               tasks: {
                 type: 'array',
                 maxItems: 8,

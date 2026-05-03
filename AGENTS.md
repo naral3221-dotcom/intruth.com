@@ -183,10 +183,11 @@
 │   ├── ProjectService.ts
 │   ├── MemberService.ts
 │   ├── AdminService.ts             # 관리자 사용자 API
+│   ├── RoutineTaskService.ts       # 루틴 업무/담당자/완료 기록 API
 │   └── ai/
 │       ├── AiTranscriptionService.ts  # 회의 녹음 업로드/전사/회의자료 생성
 │       ├── AiAssistantService.ts      # AI 명령 로그/메모리/승인 액션
-│       └── AgentToolRegistry.ts       # 승인 기반 프로젝트/회의/업무/팀 생성 도구
+│       └── AgentToolRegistry.ts       # 승인 기반 프로젝트/회의/업무/팀/루틴 생성 도구
 │
 ├── di/                            # 의존성 주입
 │   └── container.ts               # DI Container
@@ -198,7 +199,7 @@
 │   ├── ai.ts                      # AI 회의 녹음/전사/회의자료 생성/Assistant/Agent Tool Plan
 │   ├── admin.ts                   # 관리자 사용자 관리 API
 │   ├── teams.ts                   # Team/TeamMember DB 기반 팀 API
-│   ├── routineTasks.ts            # 루틴 업무 API 조회 호환 라우트
+│   ├── routineTasks.ts            # RoutineTask DB 기반 루틴 업무 CRUD/완료 API
 │   └── ...
 │
 ├── middleware/
@@ -359,7 +360,7 @@ OPENAI_ASSISTANT_OUTPUT_COST_PER_1M= # 선택: 비용 추정용 출력 단가
 - [x] Repository 계층 (Task, Project, Member, Team, Dashboard, Auth, Routine, Meeting, Admin)
 - [x] Use Case 계층 (Task, Project)
 - [x] 클라이언트 DI (RepositoryProvider)
-- [x] 서버 Service 계층 (Task, Project, Member, Dashboard, Auth, Admin, Meeting, AI Transcription, AI Assistant, Agent Tool Registry)
+- [x] 서버 Service 계층 (Task, Project, Member, Dashboard, Auth, Admin, Meeting, RoutineTask, AI Transcription, AI Assistant, Agent Tool Registry)
 - [x] 서버 DI Container
 - [x] routes/tasks.ts 마이그레이션
 - [x] routes/projects.ts 마이그레이션
@@ -379,6 +380,7 @@ OPENAI_ASSISTANT_OUTPUT_COST_PER_1M= # 선택: 비용 추정용 출력 단가
 - [x] AI 계정별 명령 로그/압축 메모리 및 프롬프트 캐시 키 기반 구축
 - [x] AI Agent Tool Registry 기반 승인 실행 계획 (프로젝트/회의자료/업무/팀 생성)
 - [x] Team/TeamMember DB 기반 팀 API 및 회의자료 팀 연결
+- [x] RoutineTask DB 기반 루틴 업무 CRUD/완료 API 및 AI 루틴 생성 Tool Plan
 - [x] 회의자료 고유 링크 페이지(`/meetings/:meetingId`) 및 Notion형 문서 진입 구조
 - [x] 브라우저 직접 녹음, 자동 전사, AI 회의자료 초안 자동 생성 흐름
 

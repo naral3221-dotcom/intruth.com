@@ -526,7 +526,7 @@ export interface AiTaskDraftPreview {
   generatedAt: string;
 }
 
-export type AiAgentToolName = 'create_project' | 'create_meeting' | 'create_tasks' | 'create_team';
+export type AiAgentToolName = 'create_project' | 'create_meeting' | 'create_tasks' | 'create_team' | 'create_routine';
 
 export interface AiAgentToolCallPreview {
   id: string;
@@ -543,6 +543,11 @@ export interface AiAgentToolCallPreview {
     meetingDate?: string | null;
     content?: string | null;
     color?: string | null;
+    priority?: TaskPriority | string | null;
+    repeatType?: RepeatType | string | null;
+    repeatDays?: number[];
+    estimatedMinutes?: number | null;
+    assigneeName?: string | null;
     tasks?: AiTaskDraft[];
     agendas?: Array<{ title: string; description?: string | null }>;
   };
@@ -572,6 +577,7 @@ export interface AiAgentAction {
     projects?: Array<{ id: string; name: string }>;
     meetings?: Array<{ id: number; title: string; projectId?: string | null }>;
     teams?: Array<{ id: string; name: string; color?: string | null }>;
+    routines?: Array<{ id: string; title: string; projectId?: string | null; repeatType?: string; repeatDays?: number[] }>;
   } | null;
   errorMessage?: string | null;
   reviewedById?: string | null;

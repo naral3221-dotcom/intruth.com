@@ -14,7 +14,7 @@ flowchart LR
   P2 --> P3["Phase 3\n회의자료 초안 승인\n완료"]
   P3 --> P4["Phase 4\n액션 아이템 -> 업무\n2차 완료"]
   P4 --> P5["Phase 5\nAI Assistant 읽기 모드\n2차 완료"]
-  P5 --> P6["Phase 6\n승인 기반 쓰기 Agent\n3차 완료"]
+  P5 --> P6["Phase 6\n승인 기반 쓰기 Agent\n4차 완료"]
   P6 --> P7["Phase 7\nVPS/GitHub 배포\n대기"]
 ```
 
@@ -30,7 +30,7 @@ flowchart LR
 | 3. 회의자료 초안 승인 | ✅ 1차 완료 | ██████████ 100% | AI 자료 초안 저장, 초안 목록/적용/폐기 API, 모바일 승인 UI, 회의자료/액션아이템 반영 | 감사/비용 로그 연결 |
 | 4. 액션 아이템 -> 업무 | ✅ 2차 완료 | ██████████ 100% | 회의 할 일 선택, 승인 후 Task 생성, MeetingActionItem-Task 연결, 중복 전환 방지, 담당자 이름 자동 매칭, 생성 직후 카카오 공유, 업무 후보 카드 편집 | 운영 중 피드백 반영 |
 | 5. AI Assistant 읽기 모드 | ✅ 2차 완료 | █████████░ 90% | 멤버별 미완료 업무/회의/프로젝트 읽기, 범위 선택, OpenAI/로컬 요약, 모바일 AI 요청 패널, 카카오 브리핑 공유, 최근 요청 기록/재열람, 토큰 사용량 기록 | 대화형 문맥 이어가기, 비용 단가 운영 설정 |
-| 6. 승인 기반 쓰기 Agent | ✅ 3차 완료 | █████████░ 90% | `AiAgentAction` 모델, 업무 초안 생성, 승인/거절 카드, 승인 후 Task 생성, 실행 로그, 전역 AI 명령 채팅 패널, 서버 Tool Registry, OpenAI 구조화 Tool Plan, 프로젝트/회의자료/업무/팀 생성 승인 실행 | 수정 diff 승인, 루틴 도구, 카카오/파일 외부 도구 |
+| 6. 승인 기반 쓰기 Agent | ✅ 4차 완료 | ██████████ 95% | `AiAgentAction` 모델, 업무 초안 생성, 승인/거절 카드, 승인 후 Task 생성, 실행 로그, 전역 AI 명령 채팅 패널, 서버 Tool Registry, OpenAI 구조화 Tool Plan, 프로젝트/회의자료/업무/팀/루틴 생성 승인 실행 | 수정 diff 승인, 카카오/파일 외부 도구 |
 | 7. VPS/GitHub 배포 | ⏳ 대기 | ░░░░░░░░░░ 0% | GitHub 저장소 준비 | Docker/Nginx/HTTPS/PostgreSQL/환경변수/배포 자동화 |
 
 ---
@@ -59,6 +59,7 @@ flowchart LR
 - `AgentToolRegistry` 기반 프로젝트/회의자료/업무/팀 생성 Tool Plan과 승인 실행
 - OpenAI Structured Output 기반 Tool Plan 생성과 로컬 Tool Registry fallback
 - Tool Plan 업무 생성 시 담당자 이름을 프로젝트 멤버/소유자로 매칭
+- RoutineTask DB/API와 AI 루틴 생성 Tool Plan
 - `/api/ai/assistant/tool-plan`을 통한 명령 저장, 승인 대기, 실행 결과 기록
 - 실제 서버 모드 관리자 페이지를 위한 `/api/admin/users` 호환 API 보강
 - 로컬 개발 모드 AI API 포트 설정 보정 및 네트워크 실패 메시지 개선
@@ -69,7 +70,7 @@ flowchart LR
 ## 다음 추천 순서
 
 1. Phase 6 확장: 수정 작업용 변경 전/후 diff 승인 카드
-2. Phase 6 확장: 루틴 생성/카카오 공유/PDF 생성 같은 외부 도구 연결
+2. Phase 6 확장: 카카오 공유/PDF 생성 같은 외부 도구 연결
 3. Phase 6 보강: Tool Plan을 실제 수정 diff/외부 공유 도구까지 확장
 4. Phase 7: GitHub Actions + VPS 배포 자동화
 
@@ -129,6 +130,9 @@ flowchart LR
 | Tool Plan 생성 API | ✅ `/api/ai/assistant/tool-plan` 실제 호출 확인 |
 | OpenAI 구조화 Tool Plan | ✅ 프로젝트+업무 복합 계획 생성 및 토큰 사용량 기록 확인 |
 | Tool Plan 승인 실행 | ✅ 검증용 프로젝트 생성 후 삭제 정리 |
+| RoutineTask 마이그레이션 | ✅ `20260503020000_add_routine_tasks` 적용 |
+| 루틴 업무 API | ✅ 생성/개인 목록/완료/삭제 직접 호출 확인 |
+| AI 루틴 Tool Plan | ✅ `create_routine` 생성/승인 후 월·수 반복 루틴 생성 확인 |
 | 관리자 API 호환 라우트 | ✅ `/api/admin/users` 404 제거 및 UI 감사 통과 |
 | 테스트 업무 정리 | ✅ 생성된 검증용 Task 삭제 완료 |
 | 서버 빌드 | ✅ 통과 |
