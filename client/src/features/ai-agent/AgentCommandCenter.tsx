@@ -21,6 +21,7 @@ import {
   askAiAssistant,
   clearAiCommandMessages,
   createAiTaskDraftAction,
+  createAiToolPlanAction,
   listAiAgentActions,
   listAiAssistantRuns,
   listAiCommandMessages,
@@ -53,8 +54,8 @@ type LocalCommandResult =
     };
 
 const commandSuggestions: QuickAction[] = [
-  { label: "새 회의", command: "새 회의 열어줘" },
-  { label: "회의 안건", command: "주간 회의 안건을 만들어줘" },
+  { label: "회의 생성", command: "다음 청년부 회의자료 만들고 기본 안건도 준비해줘" },
+  { label: "실행 계획", command: "새 프로젝트와 준비 업무를 실행 계획으로 만들어줘" },
   { label: "승인 대기", command: "AI 승인 대기 보여줘" },
   { label: "업무 초안", command: "현재 프로젝트 업무 초안 만들어줘" },
 ];
@@ -132,9 +133,58 @@ function getActionStatusLabel(status: AiAgentAction["status"]) {
 }
 
 function summarizeAction(action: AiAgentAction) {
+  if (action.preview.type === "TOOL_PLAN") {
+    const firstTool = action.preview.tools[0]?.label || "도구";
+    return `${firstTool} 포함 ${action.preview.tools.length}개 실행 계획`;
+  }
+
   const taskCount = action.preview.tasks.length;
   const projectName = action.preview.projectName || action.scope.label;
   return `${projectName}에 ${taskCount}개 업무 초안`;
+}
+
+function getActionBrief(action: AiAgentAction) {
+  return action.preview.brief;
+}
+
+function getActionToolLines(action: AiAgentAction) {
+  if (action.preview.type === "TOOL_PLAN") {
+    return action.preview.tools.map((tool) => tool.summary);
+  }
+
+  return action.preview.tasks.slice(0, 4).map((task) => {
+    const due = task.dueDate ? ` · ${task.dueDate}` : "";
+    const assignee = task.assigneeName ? ` · ${task.assigneeName}` : "";
+    return `${task.title}${due}${assignee}`;
+  });
+}
+
+function isAgentExecutionCommand(command: string) {
+  const normalized = command.toLowerCase();
+  const hasWriteTarget = containsAny(normalized, [
+    "프로젝트",
+    "회의",
+    "회의자료",
+    "회의록",
+    "업무",
+    "할 일",
+    "태스크",
+    "팀",
+    "그룹",
+    "task",
+  ]);
+  const hasWriteVerb = containsAny(normalized, [
+    "만들",
+    "생성",
+    "추가",
+    "등록",
+    "잡아",
+    "준비",
+    "실행",
+    "세팅",
+  ]);
+
+  return hasWriteTarget && hasWriteVerb && !containsAny(normalized, ["창", "모달"]);
 }
 
 function uniqueQuickActions(actions: QuickAction[]) {
@@ -610,10 +660,29 @@ export function AgentCommandCenter() {
         type: "PROJECT",
         id: selectedProjectId,
       });
+      const preview = result.action.preview.type === "CREATE_TASKS" ? result.action.preview : null;
       return {
-        content: `${result.action.preview.projectName}에 ${result.action.preview.tasks.length}개 업무 초안을 만들었어요. 아래에서 승인하면 실제 업무로 생성됩니다.`,
+        content: preview
+          ? `${preview.projectName}에 ${preview.tasks.length}개 업무 초안을 만들었어요. 아래에서 승인하면 실제 업무로 생성됩니다.`
+          : result.assistant.answer,
         actions: [result.action],
         quickActions: [{ label: "승인 대기 보기", command: "AI 승인 대기 보여줘" }],
+      };
+    }
+
+    if (isAgentExecutionCommand(normalized)) {
+      const result = await createAiToolPlanAction(buildConversationPrompt(command, messages), selectedProjectId
+        ? { type: "PROJECT", id: selectedProjectId }
+        : undefined);
+
+      return {
+        content: result.assistant.answer,
+        actions: [result.action],
+        quickActions: [
+          { label: "승인 대기 보기", command: "AI 승인 대기 보여줘" },
+          { label: "회의자료 확인", command: "회의 페이지로 이동" },
+          { label: "업무 보드", command: "업무 보드로 이동" },
+        ],
       };
     }
 
@@ -736,14 +805,29 @@ export function AgentCommandCenter() {
       updateActionInMessages(result.action);
 
       const taskStore = useTaskStore.getState();
-      const existingIds = new Set(taskStore.tasks.map((task) => task.id));
-      taskStore.setTasks([...taskStore.tasks, ...result.tasks.filter((task) => !existingIds.has(task.id))]);
+      if (Array.isArray(result.tasks) && result.tasks.length > 0 && "status" in result.tasks[0]) {
+        const existingIds = new Set(taskStore.tasks.map((task) => task.id));
+        taskStore.setTasks([...taskStore.tasks, ...result.tasks.filter((task) => !existingIds.has(task.id))]);
+      } else {
+        void taskStore.fetchTasks();
+      }
+
+      const resultSummary = result.result
+        ? [
+            result.result.projects?.length ? `프로젝트 ${result.result.projects.length}개` : null,
+            result.result.meetings?.length ? `회의자료 ${result.result.meetings.length}개` : null,
+            result.result.tasks?.length ? `업무 ${result.result.tasks.length}개` : null,
+            result.result.teams?.length ? `팀 ${result.result.teams.length}개` : null,
+          ].filter(Boolean).join(", ")
+        : "";
 
       appendMessage(
-        createMessage("assistant", `${result.createdCount}개 업무를 실제 업무 목록에 생성했어요.`, {
+        createMessage("assistant", resultSummary
+          ? `${resultSummary}를 실제 데이터로 생성했어요.`
+          : `${result.createdCount}개 항목을 실제 데이터로 생성했어요.`, {
           quickActions: [
             { label: "업무 보드로 이동", command: "업무 보드로 이동" },
-            { label: "새 업무 열기", command: "새 업무 열어줘" },
+            { label: "회의자료로 이동", command: "회의 페이지로 이동" },
           ],
         })
       );
@@ -858,7 +942,14 @@ export function AgentCommandCenter() {
                                     {getActionStatusLabel(action.status)}
                                   </span>
                                 </div>
-                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{action.preview.brief}</p>
+                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{getActionBrief(action)}</p>
+                                <div className="mt-2 space-y-1">
+                                  {getActionToolLines(action).slice(0, 4).map((line) => (
+                                    <p key={`${action.id}-${line}`} className="line-clamp-1 text-[11px] leading-4 text-muted-foreground">
+                                      {line}
+                                    </p>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                             <div className="mt-3 flex gap-2">

@@ -6,6 +6,7 @@ import type {
   AiCommandMessage,
   ApproveAiAgentActionResult,
   CreateAiTaskDraftActionResult,
+  CreateAiToolPlanActionResult,
   SaveAiCommandMessageInput,
 } from '@/types';
 
@@ -150,6 +151,27 @@ export async function createAiTaskDraftAction(
 ): Promise<CreateAiTaskDraftActionResult> {
   const token = getToken();
   const response = await requestAi('/ai/assistant/task-drafts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: JSON.stringify({ prompt, scope }),
+  });
+
+  if (!response.ok) {
+    await throwAiError(response);
+  }
+
+  return response.json();
+}
+
+export async function createAiToolPlanAction(
+  prompt: string,
+  scope?: Pick<AiAssistantScope, 'type' | 'id'>
+): Promise<CreateAiToolPlanActionResult> {
+  const token = getToken();
+  const response = await requestAi('/ai/assistant/tool-plan', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

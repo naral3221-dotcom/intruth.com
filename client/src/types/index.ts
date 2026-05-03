@@ -504,7 +504,7 @@ export interface AiAssistantHistoryItem extends AiAssistantResult {
 }
 
 export type AiAgentActionStatus = 'PENDING_APPROVAL' | 'EXECUTED' | 'REJECTED' | 'FAILED';
-export type AiAgentActionType = 'CREATE_TASKS';
+export type AiAgentActionType = 'CREATE_TASKS' | 'TOOL_PLAN';
 
 export interface AiTaskDraft {
   title: string;
@@ -516,7 +516,7 @@ export interface AiTaskDraft {
 }
 
 export interface AiTaskDraftPreview {
-  type: AiAgentActionType;
+  type: 'CREATE_TASKS';
   prompt: string;
   brief: string;
   projectId: string;
@@ -526,16 +526,52 @@ export interface AiTaskDraftPreview {
   generatedAt: string;
 }
 
+export type AiAgentToolName = 'create_project' | 'create_meeting' | 'create_tasks' | 'create_team';
+
+export interface AiAgentToolCallPreview {
+  id: string;
+  toolName: AiAgentToolName;
+  label: string;
+  summary: string;
+  args: {
+    title?: string;
+    description?: string | null;
+    projectId?: string | null;
+    projectName?: string | null;
+    teamId?: string | null;
+    teamName?: string | null;
+    meetingDate?: string | null;
+    content?: string | null;
+    color?: string | null;
+    tasks?: AiTaskDraft[];
+    agendas?: Array<{ title: string; description?: string | null }>;
+  };
+}
+
+export interface AiToolPlanPreview {
+  type: 'TOOL_PLAN';
+  prompt: string;
+  brief: string;
+  tools: AiAgentToolCallPreview[];
+  sourceRunId?: number;
+  generatedAt: string;
+}
+
+export type AiAgentActionPreview = AiTaskDraftPreview | AiToolPlanPreview;
+
 export interface AiAgentAction {
   id: number;
   assistantRunId?: number | null;
   actionType: AiAgentActionType;
   status: AiAgentActionStatus;
   scope: AiAssistantScope;
-  preview: AiTaskDraftPreview;
+  preview: AiAgentActionPreview;
   result?: {
     createdCount?: number;
     tasks?: Array<{ id: string; title: string; projectId: string }>;
+    projects?: Array<{ id: string; name: string }>;
+    meetings?: Array<{ id: number; title: string; projectId?: string | null }>;
+    teams?: Array<{ id: string; name: string; color?: string | null }>;
   } | null;
   errorMessage?: string | null;
   reviewedById?: string | null;
@@ -575,10 +611,16 @@ export interface CreateAiTaskDraftActionResult {
   action: AiAgentAction;
 }
 
+export interface CreateAiToolPlanActionResult {
+  assistant: AiAssistantResult;
+  action: AiAgentAction;
+}
+
 export interface ApproveAiAgentActionResult {
   action: AiAgentAction;
-  tasks: Task[];
+  tasks?: Task[];
   createdCount: number;
+  result?: AiAgentAction['result'];
 }
 
 export interface MeetingComment {

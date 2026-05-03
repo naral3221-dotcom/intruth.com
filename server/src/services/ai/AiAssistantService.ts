@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 import { ActivityLogService } from '../ActivityLogService.js';
+import { AgentToolPlanPreview, AgentToolRegistry } from './AgentToolRegistry.js';
 
 interface MemberContext {
   id: string;
@@ -23,7 +24,7 @@ export interface AskAiAssistantInput {
 
 type AiAssistantScopeType = 'GLOBAL' | 'PROJECT' | 'MEETING';
 type AiAgentActionStatus = 'PENDING_APPROVAL' | 'EXECUTED' | 'REJECTED' | 'FAILED';
-type AiAgentActionType = 'CREATE_TASKS';
+type AiAgentActionType = 'CREATE_TASKS' | 'TOOL_PLAN';
 type AiTaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 interface AiAssistantScope {
@@ -118,7 +119,7 @@ export interface AiTaskDraft {
 }
 
 export interface AiTaskDraftPreview {
-  type: AiAgentActionType;
+  type: 'CREATE_TASKS';
   prompt: string;
   brief: string;
   projectId: string;
@@ -127,6 +128,8 @@ export interface AiTaskDraftPreview {
   sourceRunId?: number;
   generatedAt: string;
 }
+
+type AiAgentActionPreview = AiTaskDraftPreview | AgentToolPlanPreview;
 
 export interface AiAgentActionItem {
   id: number;
@@ -138,7 +141,7 @@ export interface AiAgentActionItem {
     id?: string;
     label: string;
   };
-  preview: AiTaskDraftPreview;
+  preview: AiAgentActionPreview;
   result?: unknown;
   errorMessage?: string | null;
   reviewedById?: string | null;
@@ -149,6 +152,11 @@ export interface AiAgentActionItem {
 }
 
 export interface CreateAiTaskDraftActionResult {
+  assistant: AiAssistantResult;
+  action: AiAgentActionItem;
+}
+
+export interface CreateAiToolPlanActionResult {
   assistant: AiAssistantResult;
   action: AiAgentActionItem;
 }
@@ -203,7 +211,11 @@ export class AiAssistantService {
   constructor(
     private prisma: PrismaClient,
     private activityLogService: ActivityLogService
-  ) {}
+  ) {
+    this.toolRegistry = new AgentToolRegistry(prisma, activityLogService);
+  }
+
+  private readonly toolRegistry: AgentToolRegistry;
 
   private sanitizePrompt(prompt: string) {
     const normalized = prompt.replace(/\s+/g, ' ').trim();
@@ -899,10 +911,14 @@ export class AiAssistantService {
     createdAt: Date;
     updatedAt: Date;
   }): AiAgentActionItem {
+    if (action.actionType === 'TOOL_PLAN') {
+      return this.toolRegistry.toAgentActionItem(action) as AiAgentActionItem;
+    }
+
     return {
       id: action.id,
       assistantRunId: action.assistantRunId,
-      actionType: action.actionType === 'CREATE_TASKS' ? 'CREATE_TASKS' : 'CREATE_TASKS',
+      actionType: 'CREATE_TASKS',
       status: ['EXECUTED', 'REJECTED', 'FAILED'].includes(action.status)
         ? action.status as AiAgentActionStatus
         : 'PENDING_APPROVAL',
@@ -1334,6 +1350,71 @@ export class AiAssistantService {
     };
   }
 
+  async createToolPlanAction(
+    member: MemberContext,
+    input: AskAiAssistantInput
+  ): Promise<CreateAiToolPlanActionResult> {
+    const prompt = this.sanitizePrompt(input.prompt);
+    const scope = await this.resolveScope(member, input.scope);
+    const context = await this.collectContext(member, scope);
+    const sourceCounts = {
+      tasks: context.tasks.length,
+      meetings: context.meetings.length,
+      projects: context.projects.length,
+    };
+    const preview = this.toolRegistry.buildLocalPlan(prompt, scope);
+    const highlights = preview.tools.map((tool) => `${tool.label}: ${tool.summary}`);
+    const result: AiAssistantResult = {
+      scope: {
+        type: scope.type,
+        id: scope.id,
+        label: scope.label,
+      },
+      answer: [
+        preview.brief,
+        '',
+        ...highlights.map((item) => `- ${item}`),
+        '',
+        '승인하면 INTRUTH 서버 도구가 권한을 확인한 뒤 실제 데이터로 생성합니다.',
+      ].join('\n'),
+      highlights,
+      suggestedQuestions: [
+        '승인 대기 보여줘',
+        '업무 보드로 이동',
+        '회의자료로 이동',
+      ],
+      kakaoBrief: `[INTRUTH AI 실행 계획]\n${highlights.map((item) => `- ${item}`).join('\n')}`,
+      sourceCounts,
+      generatedAt: new Date().toISOString(),
+      mode: 'local',
+      usage: { model: 'local-tool-registry' },
+    };
+    const assistant = await this.recordRun(member, `도구 실행 계획: ${prompt}`, scope, result, { model: 'local-tool-registry' });
+    const storedPreview: AgentToolPlanPreview = {
+      ...preview,
+      sourceRunId: assistant.runId,
+      generatedAt: assistant.generatedAt,
+    };
+
+    const action = await this.prisma.aiAgentAction.create({
+      data: {
+        assistantRunId: assistant.runId,
+        memberId: member.id,
+        actionType: 'TOOL_PLAN',
+        status: 'PENDING_APPROVAL',
+        scopeType: scope.type,
+        scopeId: scope.id,
+        scopeLabel: scope.label,
+        preview: storedPreview as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      assistant,
+      action: this.toAgentActionItem(action),
+    };
+  }
+
   private async findActionForMember(actionId: number, member: MemberContext) {
     if (!Number.isInteger(actionId) || actionId <= 0) {
       throw new ValidationError('AI 액션 ID가 올바르지 않습니다.');
@@ -1356,6 +1437,43 @@ export class AiAssistantService {
     const action = await this.findActionForMember(actionId, member);
     if (action.status !== 'PENDING_APPROVAL') {
       throw new ValidationError('이미 처리된 AI 액션입니다.');
+    }
+
+    if (action.actionType === 'TOOL_PLAN') {
+      const currentAction = await this.prisma.aiAgentAction.findUnique({ where: { id: action.id } });
+      if (!currentAction || currentAction.status !== 'PENDING_APPROVAL') {
+        throw new ValidationError('이미 처리된 AI 액션입니다.');
+      }
+
+      try {
+        const result = await this.toolRegistry.executeToolPlan(action, member);
+        const updatedAction = await this.prisma.aiAgentAction.update({
+          where: { id: action.id },
+          data: {
+            status: 'EXECUTED',
+            reviewedById: member.id,
+            reviewedAt: new Date(),
+            executedAt: new Date(),
+            result: result as Prisma.InputJsonValue,
+          },
+        });
+
+        return {
+          action: this.toAgentActionItem(updatedAction),
+          tasks: (result.tasks || []) as unknown[],
+          createdCount: result.createdCount,
+          result,
+        };
+      } catch (error) {
+        await this.prisma.aiAgentAction.update({
+          where: { id: action.id },
+          data: {
+            status: 'FAILED',
+            errorMessage: error instanceof Error ? error.message : 'AI 도구 실행에 실패했습니다.',
+          },
+        }).catch(() => null);
+        throw error;
+      }
     }
 
     const preview = this.toTaskDraftPreview(action.preview);

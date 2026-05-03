@@ -322,6 +322,25 @@ router.post(
   }
 );
 
+router.post('/assistant/tool-plan', authenticate, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiAssistantService();
+    const result = await service.createToolPlanAction(memberContext(req), {
+      prompt: String(req.body?.prompt || ''),
+      scope: req.body?.scope
+        ? {
+          type: req.body.scope.type,
+          id: req.body.scope.id,
+        }
+        : undefined,
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
 router.post(
   '/assistant/actions/:actionId/approve',
   authenticate,

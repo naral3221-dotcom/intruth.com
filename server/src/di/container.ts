@@ -9,6 +9,7 @@ import { ProjectService } from '../services/ProjectService.js';
 import { MemberService } from '../services/MemberService.js';
 import { DashboardService } from '../services/DashboardService.js';
 import { AuthService } from '../services/AuthService.js';
+import { AdminService } from '../services/AdminService.js';
 import { MeetingService } from '../services/MeetingService.js';
 import { CellService } from '../services/CellService.js';
 import { AttendanceService } from '../services/AttendanceService.js';
@@ -23,6 +24,7 @@ type ServiceName =
   | 'MemberService'
   | 'DashboardService'
   | 'AuthService'
+  | 'AdminService'
   | 'MeetingService'
   | 'StorageService'
   | 'CellService'
@@ -37,6 +39,7 @@ interface ServiceMap {
   MemberService: MemberService;
   DashboardService: DashboardService;
   AuthService: AuthService;
+  AdminService: AdminService;
   MeetingService: MeetingService;
   StorageService: IStorageService;
   CellService: CellService;
@@ -85,6 +88,9 @@ class Container {
 
     const authService = new AuthService(prisma);
     this.instances.set('AuthService', authService);
+
+    const adminService = new AdminService(prisma);
+    this.instances.set('AdminService', adminService);
 
     // 4. 스토리지 서비스 (추후 OneDriveStorageService로 교체 가능)
     const storageService = new LocalStorageService();
@@ -175,6 +181,10 @@ export function getDashboardService(): DashboardService {
 
 export function getAuthService(): AuthService {
   return container.resolve('AuthService');
+}
+
+export function getAdminService(): AdminService {
+  return container.resolve('AdminService');
 }
 
 export function getMeetingService(): MeetingService {
