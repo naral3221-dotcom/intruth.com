@@ -214,7 +214,17 @@ const AI_TOOL_PLAN_SCHEMA = {
         properties: {
           toolName: {
             type: 'string',
-            enum: ['create_project', 'create_meeting', 'create_tasks', 'create_team', 'create_routine'],
+            enum: [
+              'create_project',
+              'create_meeting',
+              'create_tasks',
+              'create_team',
+              'create_routine',
+              'update_project',
+              'update_meeting',
+              'update_task',
+              'update_routine',
+            ],
           },
           label: { type: 'string' },
           summary: { type: 'string' },
@@ -222,6 +232,10 @@ const AI_TOOL_PLAN_SCHEMA = {
             type: 'object',
             additionalProperties: false,
             required: [
+              'targetId',
+              'taskId',
+              'meetingId',
+              'routineId',
               'title',
               'description',
               'projectId',
@@ -231,15 +245,23 @@ const AI_TOOL_PLAN_SCHEMA = {
               'meetingDate',
               'content',
               'color',
+              'status',
+              'dueDate',
               'priority',
               'repeatType',
               'repeatDays',
               'estimatedMinutes',
+              'isActive',
               'assigneeName',
               'tasks',
               'agendas',
+              'diffs',
             ],
             properties: {
+              targetId: { type: ['string', 'null'], description: 'Existing entity ID for update_* tools, otherwise null' },
+              taskId: { type: ['string', 'null'], description: 'Existing task ID for update_task, otherwise null' },
+              meetingId: { type: ['string', 'null'], description: 'Existing meeting ID for update_meeting, otherwise null' },
+              routineId: { type: ['string', 'null'], description: 'Existing routine ID for update_routine, otherwise null' },
               title: { type: ['string', 'null'] },
               description: { type: ['string', 'null'] },
               projectId: { type: ['string', 'null'] },
@@ -249,6 +271,11 @@ const AI_TOOL_PLAN_SCHEMA = {
               meetingDate: { type: ['string', 'null'], description: 'ISO date-time only when explicitly clear, otherwise null' },
               content: { type: ['string', 'null'] },
               color: { type: ['string', 'null'] },
+              status: {
+                type: ['string', 'null'],
+                enum: ['ACTIVE', 'COMPLETED', 'ARCHIVED', 'ON_HOLD', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE', 'DRAFT', 'PUBLISHED', null],
+              },
+              dueDate: { type: ['string', 'null'], description: 'YYYY-MM-DD for update_task when explicitly clear, otherwise null' },
               priority: { type: ['string', 'null'], enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT', null] },
               repeatType: { type: ['string', 'null'], enum: ['daily', 'weekly', 'custom', null] },
               repeatDays: {
@@ -257,6 +284,7 @@ const AI_TOOL_PLAN_SCHEMA = {
                 items: { type: 'integer', minimum: 0, maximum: 6 },
               },
               estimatedMinutes: { type: ['integer', 'null'], minimum: 0, maximum: 1440 },
+              isActive: { type: ['boolean', 'null'] },
               assigneeName: { type: ['string', 'null'] },
               tasks: {
                 type: 'array',
@@ -284,6 +312,22 @@ const AI_TOOL_PLAN_SCHEMA = {
                   properties: {
                     title: { type: 'string' },
                     description: { type: ['string', 'null'] },
+                  },
+                },
+              },
+              diffs: {
+                type: 'array',
+                maxItems: 12,
+                description: 'Always return an empty array. The INTRUTH server computes trusted before/after diffs.',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['field', 'label', 'before', 'after'],
+                  properties: {
+                    field: { type: 'string' },
+                    label: { type: 'string' },
+                    before: { type: ['string', 'null'] },
+                    after: { type: ['string', 'null'] },
                   },
                 },
               },
@@ -482,6 +526,7 @@ export class AiAssistantService {
           meetingDate: true,
           location: true,
           summary: true,
+          status: true,
           projectId: true,
           actionItems: {
             select: {
@@ -503,6 +548,7 @@ export class AiAssistantService {
           id: true,
           name: true,
           description: true,
+          status: true,
           endDate: true,
           _count: { select: { tasks: true } },
         },
@@ -516,11 +562,11 @@ export class AiAssistantService {
 
   private toContextText(context: Awaited<ReturnType<AiAssistantService['collectContext']>>) {
     const taskLines = context.tasks.map((task) => [
-      `- ${task.title}`,
+      `- [taskId=${task.id}] ${task.title}`,
       `상태 ${task.status}`,
       `우선순위 ${task.priority}`,
       task.dueDate ? `마감 ${task.dueDate.toISOString().slice(0, 10)}` : '마감 없음',
-      task.project?.name ? `프로젝트 ${task.project.name}` : null,
+      task.project?.name ? `프로젝트 ${task.project.name} (${task.project.id})` : null,
       task.assignee?.name ? `담당 ${task.assignee.name}` : null,
     ].filter(Boolean).join(' / '));
 
@@ -530,8 +576,10 @@ export class AiAssistantService {
         : null;
 
       return [
-        `- ${meeting.title}`,
+        `- [meetingId=${meeting.id}] ${meeting.title}`,
         meeting.meetingDate.toISOString().slice(0, 16),
+        `상태 ${meeting.status}`,
+        meeting.projectId ? `프로젝트 ID ${meeting.projectId}` : null,
         meeting.location ? `장소 ${meeting.location}` : null,
         meeting.summary ? `요약 ${meeting.summary}` : null,
         actionItems,
@@ -539,7 +587,8 @@ export class AiAssistantService {
     });
 
     const projectLines = context.projects.map((project) => [
-      `- ${project.name}`,
+      `- [projectId=${project.id}] ${project.name}`,
+      `상태 ${project.status}`,
       `업무 ${project._count.tasks}개`,
       project.endDate ? `종료 ${project.endDate.toISOString().slice(0, 10)}` : null,
     ].filter(Boolean).join(' / '));
@@ -624,6 +673,10 @@ export class AiAssistantService {
       'Never claim that data has already been created or changed. The server will only execute after human approval.',
       'Use only the listed server tools. Do not invent tool names, external integrations, hidden actions, or background jobs.',
       'Prefer the fewest useful tools. When a request needs both a project and tasks but no target project is clear, create the project first, then create_tasks without projectId so the server can chain it.',
+      'For update_* tools, use only explicit IDs from the current scope or INTRUTH context. Put the target in targetId and also taskId, meetingId, routineId, or projectId when relevant.',
+      'For update_* tools, include only fields the user actually wants changed. Use status enums exactly: projects ACTIVE/COMPLETED/ARCHIVED/ON_HOLD, tasks TODO/IN_PROGRESS/REVIEW/DONE, meetings DRAFT/PUBLISHED.',
+      'If the user asks to rename, retitle, or change a name/title, set args.title. Do not change status unless the user explicitly asks for 상태, 완료, 보류, 진행, published, draft, done, or similar state words.',
+      'Always set args.diffs to an empty array. The server will compute trusted before/after diffs before asking for approval.',
       'Use current INTRUTH context and saved account memory only as grounding, not as permission to perform unrelated changes.',
       'Dates must be explicit. For relative Korean dates, resolve them against the provided Asia/Seoul current date and use ISO date-time for meetings or YYYY-MM-DD for tasks.',
       'If the user asks for advice, brainstorming, or a read-only answer instead of a concrete write action, return an empty tools array.',
@@ -846,6 +899,11 @@ export class AiAssistantService {
 
     if (!project) {
       throw new ValidationError('업무를 만들 프로젝트를 찾을 수 없습니다.');
+    }
+
+    const hasCreatePermission = Boolean(member.permissions?.system?.manage_settings || member.permissions?.task?.create);
+    if (!hasCreatePermission) {
+      throw new ForbiddenError('업무를 생성할 권한이 없습니다.');
     }
 
     const isAdmin = Boolean(member.permissions?.system?.manage_settings);
@@ -1596,6 +1654,8 @@ export class AiAssistantService {
         throw error;
       }
     }
+
+    preview = await this.toolRegistry.enrichToolPlanPreview(preview, member, scope);
 
     const assistant = await this.recordRun(
       member,

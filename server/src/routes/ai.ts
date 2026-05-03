@@ -344,7 +344,6 @@ router.post('/assistant/tool-plan', authenticate, async (req: AuthRequest, res: 
 router.post(
   '/assistant/actions/:actionId/approve',
   authenticate,
-  checkPermission('task.create'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const service = getAiAssistantService();

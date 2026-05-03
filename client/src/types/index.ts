@@ -526,7 +526,23 @@ export interface AiTaskDraftPreview {
   generatedAt: string;
 }
 
-export type AiAgentToolName = 'create_project' | 'create_meeting' | 'create_tasks' | 'create_team' | 'create_routine';
+export type AiAgentToolName =
+  | 'create_project'
+  | 'create_meeting'
+  | 'create_tasks'
+  | 'create_team'
+  | 'create_routine'
+  | 'update_project'
+  | 'update_meeting'
+  | 'update_task'
+  | 'update_routine';
+
+export interface AiAgentDiffItem {
+  field: string;
+  label: string;
+  before: string | null;
+  after: string | null;
+}
 
 export interface AiAgentToolCallPreview {
   id: string;
@@ -534,6 +550,10 @@ export interface AiAgentToolCallPreview {
   label: string;
   summary: string;
   args: {
+    targetId?: string | null;
+    taskId?: string | null;
+    meetingId?: number | string | null;
+    routineId?: string | null;
     title?: string;
     description?: string | null;
     projectId?: string | null;
@@ -543,13 +563,17 @@ export interface AiAgentToolCallPreview {
     meetingDate?: string | null;
     content?: string | null;
     color?: string | null;
+    status?: string | null;
+    dueDate?: string | null;
     priority?: TaskPriority | string | null;
     repeatType?: RepeatType | string | null;
     repeatDays?: number[];
     estimatedMinutes?: number | null;
+    isActive?: boolean | null;
     assigneeName?: string | null;
     tasks?: AiTaskDraft[];
     agendas?: Array<{ title: string; description?: string | null }>;
+    diffs?: AiAgentDiffItem[];
   };
 }
 
@@ -573,11 +597,16 @@ export interface AiAgentAction {
   preview: AiAgentActionPreview;
   result?: {
     createdCount?: number;
+    updatedCount?: number;
     tasks?: Array<{ id: string; title: string; projectId: string }>;
     projects?: Array<{ id: string; name: string }>;
     meetings?: Array<{ id: number; title: string; projectId?: string | null }>;
     teams?: Array<{ id: string; name: string; color?: string | null }>;
     routines?: Array<{ id: string; title: string; projectId?: string | null; repeatType?: string; repeatDays?: number[] }>;
+    updatedTasks?: Array<{ id: string; title: string; projectId: string; diffs?: AiAgentDiffItem[] }>;
+    updatedProjects?: Array<{ id: string; name: string; diffs?: AiAgentDiffItem[] }>;
+    updatedMeetings?: Array<{ id: number; title: string; projectId?: string | null; diffs?: AiAgentDiffItem[] }>;
+    updatedRoutines?: Array<{ id: string; title: string; projectId?: string | null; repeatType?: string; repeatDays?: number[]; diffs?: AiAgentDiffItem[] }>;
   } | null;
   errorMessage?: string | null;
   reviewedById?: string | null;

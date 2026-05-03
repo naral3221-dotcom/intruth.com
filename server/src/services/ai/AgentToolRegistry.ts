@@ -2,7 +2,16 @@ import { PrismaClient } from '@prisma/client';
 import { ActivityLogService } from '../ActivityLogService.js';
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 
-export type AgentToolName = 'create_project' | 'create_meeting' | 'create_tasks' | 'create_team' | 'create_routine';
+export type AgentToolName =
+  | 'create_project'
+  | 'create_meeting'
+  | 'create_tasks'
+  | 'create_team'
+  | 'create_routine'
+  | 'update_project'
+  | 'update_meeting'
+  | 'update_task'
+  | 'update_routine';
 
 export interface AgentMemberContext {
   id: string;
@@ -31,12 +40,23 @@ export interface AgentAgendaDraft {
   description?: string | null;
 }
 
+export interface AgentDiffItem {
+  field: string;
+  label: string;
+  before: string | null;
+  after: string | null;
+}
+
 export interface AgentToolCallPreview {
   id: string;
   toolName: AgentToolName;
   label: string;
   summary: string;
   args: {
+    targetId?: string | null;
+    taskId?: string | null;
+    meetingId?: number | string | null;
+    routineId?: string | null;
     title?: string;
     description?: string | null;
     projectId?: string | null;
@@ -46,13 +66,17 @@ export interface AgentToolCallPreview {
     meetingDate?: string | null;
     content?: string | null;
     color?: string | null;
+    status?: string | null;
+    dueDate?: string | null;
     priority?: string | null;
     repeatType?: string | null;
     repeatDays?: number[];
     estimatedMinutes?: number | null;
+    isActive?: boolean | null;
     assigneeName?: string | null;
     tasks?: AgentTaskDraft[];
     agendas?: AgentAgendaDraft[];
+    diffs?: AgentDiffItem[];
   };
 }
 
@@ -84,6 +108,20 @@ export interface AgentToolActionRow {
 }
 
 const TASK_PRIORITIES = new Set(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
+const TASK_STATUSES = new Set(['TODO', 'IN_PROGRESS', 'REVIEW', 'DONE']);
+const PROJECT_STATUSES = new Set(['ACTIVE', 'COMPLETED', 'ARCHIVED', 'ON_HOLD']);
+const MEETING_STATUSES = new Set(['DRAFT', 'PUBLISHED']);
+const AGENT_TOOL_NAMES = new Set<AgentToolName>([
+  'create_project',
+  'create_meeting',
+  'create_tasks',
+  'create_team',
+  'create_routine',
+  'update_project',
+  'update_meeting',
+  'update_task',
+  'update_routine',
+]);
 const WEEKDAY_OFFSETS: Record<string, number> = {
   일요일: 0,
   월요일: 1,
@@ -145,6 +183,26 @@ export class AgentToolRegistry {
         description: '반복 업무 루틴을 생성합니다. 요일, 프로젝트, 담당자 이름, 예상 시간을 함께 지정할 수 있습니다.',
         approvalRequired: true,
       },
+      {
+        name: 'update_project',
+        description: '기존 프로젝트의 이름, 설명, 상태를 수정합니다. targetId 또는 projectId가 필요하며 서버가 변경 전/후 diff를 계산합니다.',
+        approvalRequired: true,
+      },
+      {
+        name: 'update_meeting',
+        description: '기존 회의자료의 제목, 날짜, 팀/프로젝트, 본문, 요약, 상태를 수정합니다. targetId 또는 meetingId가 필요합니다.',
+        approvalRequired: true,
+      },
+      {
+        name: 'update_task',
+        description: '기존 업무의 제목, 설명, 상태, 우선순위, 마감일, 담당자를 수정합니다. targetId 또는 taskId가 필요합니다.',
+        approvalRequired: true,
+      },
+      {
+        name: 'update_routine',
+        description: '기존 반복 업무 루틴의 제목, 설명, 반복 요일, 우선순위, 예상 시간, 활성 상태를 수정합니다. targetId 또는 routineId가 필요합니다.',
+        approvalRequired: true,
+      },
     ];
   }
 
@@ -163,6 +221,85 @@ export class AgentToolRegistry {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
     const parsed = new Date(`${raw}T00:00:00.000Z`);
     return Number.isNaN(parsed.getTime()) ? null : raw;
+  }
+
+  private parseOptionalDateTime(value: unknown) {
+    if (!value) return null;
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private normalizeTaskStatus(value: unknown) {
+    const status = String(value || '').toUpperCase();
+    if (TASK_STATUSES.has(status)) return status;
+    if (/완료|끝|done/.test(String(value || '').toLowerCase())) return 'DONE';
+    if (/검토|review/.test(String(value || '').toLowerCase())) return 'REVIEW';
+    if (/진행|doing|progress/.test(String(value || '').toLowerCase())) return 'IN_PROGRESS';
+    if (/대기|todo|할 일/.test(String(value || '').toLowerCase())) return 'TODO';
+    return null;
+  }
+
+  private normalizeProjectStatus(value: unknown) {
+    const status = String(value || '').toUpperCase();
+    if (PROJECT_STATUSES.has(status)) return status;
+    if (/완료|끝|done|complete/.test(String(value || '').toLowerCase())) return 'COMPLETED';
+    if (/보류|hold/.test(String(value || '').toLowerCase())) return 'ON_HOLD';
+    if (/보관|archive/.test(String(value || '').toLowerCase())) return 'ARCHIVED';
+    if (/진행|active/.test(String(value || '').toLowerCase())) return 'ACTIVE';
+    return null;
+  }
+
+  private normalizeMeetingStatus(value: unknown) {
+    const status = String(value || '').toUpperCase();
+    if (MEETING_STATUSES.has(status)) return status;
+    if (/공개|발행|게시|publish/.test(String(value || '').toLowerCase())) return 'PUBLISHED';
+    if (/초안|임시|draft/.test(String(value || '').toLowerCase())) return 'DRAFT';
+    return null;
+  }
+
+  private optionalText(value: unknown, maxLength: number) {
+    if (value === undefined || value === null) return undefined;
+    const text = compactWhitespace(String(value));
+    return text ? text.slice(0, maxLength) : undefined;
+  }
+
+  private parseNumberId(value: unknown) {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  private formatDiffValue(value: unknown): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    if (value instanceof Date) return value.toISOString().slice(0, 16).replace('T', ' ');
+    if (typeof value === 'boolean') return value ? '활성' : '비활성';
+    if (Array.isArray(value)) return value.length ? value.join(', ') : null;
+    return compactWhitespace(String(value)).slice(0, 240) || null;
+  }
+
+  private buildDiffs(
+    before: Record<string, unknown>,
+    after: Record<string, unknown>,
+    labels: Record<string, string>
+  ): AgentDiffItem[] {
+    return Object.keys(after)
+      .map((field) => {
+        const beforeValue = this.formatDiffValue(before[field]);
+        const afterValue = this.formatDiffValue(after[field]);
+        if (beforeValue === afterValue) return null;
+        return {
+          field,
+          label: labels[field] || field,
+          before: beforeValue,
+          after: afterValue,
+        };
+      })
+      .filter((item): item is AgentDiffItem => Boolean(item));
+  }
+
+  private buildUpdateSummary(entityLabel: string, title: string, diffs: AgentDiffItem[]) {
+    const fields = diffs.map((diff) => diff.label).join(', ');
+    return `${entityLabel} "${title}"의 ${fields}을(를) 수정합니다.`;
   }
 
   private normalizePersonName(value: unknown) {
@@ -407,7 +544,7 @@ export class AgentToolRegistry {
       .map((tool, index) => {
         const candidate = tool && typeof tool === 'object' ? tool as Partial<AgentToolCallPreview> : {};
         const toolName = candidate.toolName;
-        if (!['create_project', 'create_meeting', 'create_tasks', 'create_team', 'create_routine'].includes(String(toolName))) return null;
+        if (!AGENT_TOOL_NAMES.has(toolName as AgentToolName)) return null;
         const args = candidate.args && typeof candidate.args === 'object' ? candidate.args : {};
 
         return {
@@ -459,16 +596,23 @@ export class AgentToolRegistry {
     };
   }
 
-  private async ensureProjectWrite(projectId: string, member: AgentMemberContext) {
+  private isAdmin(member: AgentMemberContext) {
+    return Boolean(member.permissions?.system?.manage_settings);
+  }
+
+  private async findProjectForAccess(projectId: string) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       select: {
         id: true,
         name: true,
+        description: true,
+        status: true,
         ownerId: true,
         owner: { select: { id: true, name: true, email: true, username: true, isActive: true } },
         members: {
           select: {
+            role: true,
             memberId: true,
             member: { select: { id: true, name: true, email: true, username: true, isActive: true } },
           },
@@ -476,12 +620,33 @@ export class AgentToolRegistry {
       },
     });
 
-    if (!project) throw new ValidationError('업무를 만들 프로젝트를 찾을 수 없습니다.');
+    if (!project) throw new ValidationError('대상 프로젝트를 찾을 수 없습니다.');
+    return project;
+  }
+
+  private canAccessProject(
+    project: { ownerId: string; members: Array<{ memberId: string }> },
+    member: AgentMemberContext
+  ) {
+    return this.isAdmin(member)
+      || project.ownerId === member.id
+      || project.members.some((item) => item.memberId === member.id);
+  }
+
+  private async ensureProjectWrite(projectId: string, member: AgentMemberContext) {
+    const project = await this.findProjectForAccess(projectId);
 
     const canWrite = this.hasPermission(member, 'task', 'create')
-      && (member.permissions?.system?.manage_settings || project.ownerId === member.id || project.members.some((item) => item.memberId === member.id));
+      && this.canAccessProject(project, member);
     if (!canWrite) throw new ForbiddenError('선택한 프로젝트에 업무를 만들 권한이 없습니다.');
 
+    return project;
+  }
+
+  private async ensureProjectEdit(projectId: string, member: AgentMemberContext) {
+    const project = await this.findProjectForAccess(projectId);
+    const canEdit = this.hasPermission(member, 'project', 'edit') && this.canAccessProject(project, member);
+    if (!canEdit) throw new ForbiddenError('선택한 프로젝트를 수정할 권한이 없습니다.');
     return project;
   }
 
@@ -729,14 +894,467 @@ export class AgentToolRegistry {
     });
   }
 
+  private async prepareUpdateProject(tool: AgentToolCallPreview, member: AgentMemberContext, scope?: AgentToolScope) {
+    const targetId = this.optionalText(tool.args.targetId || tool.args.projectId || scope?.projectId, 120);
+    if (!targetId) throw new ValidationError('수정할 프로젝트 ID가 필요합니다.');
+
+    const project = await this.ensureProjectEdit(targetId, member);
+    const data: { name?: string; description?: string | null; status?: string } = {};
+    const title = this.optionalText(tool.args.title, 120);
+    const description = this.optionalText(tool.args.description, 1000);
+    const status = tool.args.status ? this.normalizeProjectStatus(tool.args.status) : null;
+
+    if (title) data.name = title;
+    if (description !== undefined) data.description = description;
+    if (tool.args.status && !status) throw new ValidationError('프로젝트 상태 값이 올바르지 않습니다.');
+    if (status) data.status = status;
+
+    const after: Record<string, unknown> = {};
+    if (data.name !== undefined) after.name = data.name;
+    if (data.description !== undefined) after.description = data.description;
+    if (data.status !== undefined) after.status = data.status;
+
+    const diffs = this.buildDiffs(
+      { name: project.name, description: project.description, status: project.status },
+      after,
+      { name: '이름', description: '설명', status: '상태' }
+    );
+
+    if (diffs.length === 0) throw new ValidationError('프로젝트에서 실제로 바뀔 내용이 없습니다.');
+    return { project, data, diffs };
+  }
+
+  private async prepareUpdateMeeting(tool: AgentToolCallPreview, member: AgentMemberContext, scope?: AgentToolScope) {
+    const targetId = this.parseNumberId(tool.args.meetingId || tool.args.targetId || scope?.meetingId);
+    if (!targetId) throw new ValidationError('수정할 회의자료 ID가 필요합니다.');
+
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        title: true,
+        meetingDate: true,
+        projectId: true,
+        teamId: true,
+        content: true,
+        summary: true,
+        authorId: true,
+        status: true,
+      },
+    });
+    if (!meeting) throw new ValidationError('수정할 회의자료를 찾을 수 없습니다.');
+
+    const canEdit = this.isAdmin(member) || meeting.authorId === member.id;
+    if (!canEdit) throw new ForbiddenError('선택한 회의자료를 수정할 권한이 없습니다.');
+
+    const data: {
+      title?: string;
+      meetingDate?: Date;
+      projectId?: string | null;
+      teamId?: string | null;
+      content?: string;
+      summary?: string | null;
+      status?: string;
+    } = {};
+    const title = this.optionalText(tool.args.title, 160);
+    const content = this.optionalText(tool.args.content, 6000);
+    const summary = this.optionalText(tool.args.description, 1000);
+    const projectId = this.optionalText(tool.args.projectId, 120);
+    const teamId = this.optionalText(tool.args.teamId, 120);
+    const meetingDate = tool.args.meetingDate ? this.parseOptionalDateTime(tool.args.meetingDate) : null;
+    const status = tool.args.status ? this.normalizeMeetingStatus(tool.args.status) : null;
+
+    if (title) data.title = title;
+    if (content !== undefined) data.content = content;
+    if (summary !== undefined) data.summary = summary;
+    if (projectId) {
+      const project = await this.findProjectForAccess(projectId);
+      if (!this.canAccessProject(project, member)) throw new ForbiddenError('연결할 프로젝트 권한이 없습니다.');
+      data.projectId = projectId;
+    }
+    if (teamId) data.teamId = teamId;
+    if (tool.args.meetingDate && !meetingDate) throw new ValidationError('회의 날짜 형식이 올바르지 않습니다.');
+    if (meetingDate) data.meetingDate = meetingDate;
+    if (tool.args.status && !status) throw new ValidationError('회의자료 상태 값이 올바르지 않습니다.');
+    if (status) data.status = status;
+
+    const after: Record<string, unknown> = {};
+    if (data.title !== undefined) after.title = data.title;
+    if (data.meetingDate !== undefined) after.meetingDate = data.meetingDate;
+    if (data.projectId !== undefined) after.projectId = data.projectId;
+    if (data.teamId !== undefined) after.teamId = data.teamId;
+    if (data.content !== undefined) after.content = data.content;
+    if (data.summary !== undefined) after.summary = data.summary;
+    if (data.status !== undefined) after.status = data.status;
+
+    const diffs = this.buildDiffs(
+      {
+        title: meeting.title,
+        meetingDate: meeting.meetingDate,
+        projectId: meeting.projectId,
+        teamId: meeting.teamId,
+        content: meeting.content,
+        summary: meeting.summary,
+        status: meeting.status,
+      },
+      after,
+      {
+        title: '제목',
+        meetingDate: '회의 날짜',
+        projectId: '프로젝트',
+        teamId: '팀',
+        content: '본문',
+        summary: '요약',
+        status: '상태',
+      }
+    );
+
+    if (diffs.length === 0) throw new ValidationError('회의자료에서 실제로 바뀔 내용이 없습니다.');
+    return { meeting, data, diffs };
+  }
+
+  private async prepareUpdateTask(tool: AgentToolCallPreview, member: AgentMemberContext) {
+    const targetId = this.optionalText(tool.args.taskId || tool.args.targetId, 120);
+    if (!targetId) throw new ValidationError('수정할 업무 ID가 필요합니다.');
+
+    const task = await this.prisma.task.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        dueDate: true,
+        assigneeId: true,
+        reporterId: true,
+        projectId: true,
+        assignee: { select: { id: true, name: true } },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            ownerId: true,
+            owner: { select: { id: true, name: true, email: true, username: true, isActive: true } },
+            members: {
+              select: {
+                memberId: true,
+                member: { select: { id: true, name: true, email: true, username: true, isActive: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!task) throw new ValidationError('수정할 업무를 찾을 수 없습니다.');
+
+    const canEdit = this.hasPermission(member, 'task', 'edit')
+      && (this.isAdmin(member)
+        || task.project.ownerId === member.id
+        || task.project.members.some((item) => item.memberId === member.id)
+        || task.assigneeId === member.id
+        || task.reporterId === member.id);
+    if (!canEdit) throw new ForbiddenError('선택한 업무를 수정할 권한이 없습니다.');
+
+    const data: {
+      title?: string;
+      description?: string | null;
+      status?: string;
+      priority?: string;
+      dueDate?: Date | null;
+      assigneeId?: string | null;
+    } = {};
+    const title = this.optionalText(tool.args.title, 160);
+    const description = this.optionalText(tool.args.description, 2000);
+    const status = tool.args.status ? this.normalizeTaskStatus(tool.args.status) : null;
+    const priority = tool.args.priority ? this.normalizePriority(tool.args.priority) : null;
+    const parsedDueDate = tool.args.dueDate ? this.parseDueDate(tool.args.dueDate) : null;
+    const assigneeName = this.optionalText(tool.args.assigneeName, 120);
+
+    if (title) data.title = title;
+    if (description !== undefined) data.description = description;
+    if (tool.args.status && !status) throw new ValidationError('업무 상태 값이 올바르지 않습니다.');
+    if (status) data.status = status;
+    if (priority) data.priority = priority;
+    if (tool.args.dueDate && !parsedDueDate) throw new ValidationError('업무 마감일은 YYYY-MM-DD 형식이어야 합니다.');
+    if (parsedDueDate) data.dueDate = new Date(`${parsedDueDate}T00:00:00.000Z`);
+
+    const assigneeCandidates = [
+      task.project.owner,
+      ...task.project.members.map((item) => item.member),
+    ]
+      .filter((candidate) => candidate.isActive)
+      .filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+    const matchedAssigneeId = assigneeName ? this.matchAssigneeId(assigneeName, assigneeCandidates) : null;
+    const matchedAssignee = matchedAssigneeId ? assigneeCandidates.find((candidate) => candidate.id === matchedAssigneeId) : null;
+    if (assigneeName && !matchedAssigneeId) throw new ValidationError('담당자로 지정할 수 있는 멤버를 찾지 못했습니다.');
+    if (matchedAssigneeId) data.assigneeId = matchedAssigneeId;
+
+    const after: Record<string, unknown> = {};
+    if (data.title !== undefined) after.title = data.title;
+    if (data.description !== undefined) after.description = data.description;
+    if (data.status !== undefined) after.status = data.status;
+    if (data.priority !== undefined) after.priority = data.priority;
+    if (data.dueDate !== undefined) after.dueDate = data.dueDate;
+    if (data.assigneeId !== undefined) after.assignee = matchedAssignee?.name || null;
+
+    const diffs = this.buildDiffs(
+      {
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        dueDate: task.dueDate,
+        assignee: task.assignee?.name || null,
+      },
+      after,
+      {
+        title: '제목',
+        description: '설명',
+        status: '상태',
+        priority: '우선순위',
+        dueDate: '마감일',
+        assignee: '담당자',
+      }
+    );
+
+    if (diffs.length === 0) throw new ValidationError('업무에서 실제로 바뀔 내용이 없습니다.');
+    return { task, data, diffs };
+  }
+
+  private async prepareUpdateRoutine(tool: AgentToolCallPreview, member: AgentMemberContext) {
+    const targetId = this.optionalText(tool.args.routineId || tool.args.targetId, 120);
+    if (!targetId) throw new ValidationError('수정할 루틴 ID가 필요합니다.');
+
+    const routine = await this.prisma.routineTask.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        repeatType: true,
+        repeatDays: true,
+        projectId: true,
+        priority: true,
+        estimatedMinutes: true,
+        isActive: true,
+        createdById: true,
+        assignees: { select: { memberId: true } },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            ownerId: true,
+            owner: { select: { id: true, name: true, email: true, username: true, isActive: true } },
+            members: {
+              select: {
+                role: true,
+                memberId: true,
+                member: { select: { id: true, name: true, email: true, username: true, isActive: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!routine) throw new ValidationError('수정할 루틴을 찾을 수 없습니다.');
+
+    const canEdit = this.isAdmin(member)
+      || routine.createdById === member.id
+      || routine.assignees.some((item) => item.memberId === member.id)
+      || (routine.project && this.hasPermission(member, 'task', 'edit') && this.canAccessProject(routine.project, member));
+    if (!canEdit) throw new ForbiddenError('선택한 루틴을 수정할 권한이 없습니다.');
+
+    const data: {
+      title?: string;
+      description?: string | null;
+      repeatType?: string;
+      repeatDays?: number[];
+      projectId?: string | null;
+      priority?: string;
+      estimatedMinutes?: number | null;
+      isActive?: boolean;
+    } = {};
+    const title = this.optionalText(tool.args.title, 160);
+    const description = this.optionalText(tool.args.description, 1000);
+    const projectId = this.optionalText(tool.args.projectId, 120);
+    const priority = tool.args.priority ? this.normalizePriority(tool.args.priority) : null;
+    const shouldUpdateRepeat = Boolean(tool.args.repeatType) || (Array.isArray(tool.args.repeatDays) && tool.args.repeatDays.length > 0);
+    const repeat = shouldUpdateRepeat ? this.normalizeRoutineRepeat(tool) : null;
+
+    if (title) data.title = title;
+    if (description !== undefined) data.description = description;
+    if (projectId) {
+      const project = await this.findProjectForAccess(projectId);
+      if (!this.canAccessProject(project, member)) throw new ForbiddenError('연결할 프로젝트 권한이 없습니다.');
+      data.projectId = projectId;
+    }
+    if (priority) data.priority = priority;
+    if (tool.args.estimatedMinutes !== undefined && tool.args.estimatedMinutes !== null) {
+      data.estimatedMinutes = this.normalizeEstimatedMinutes(tool.args.estimatedMinutes);
+    }
+    if (typeof tool.args.isActive === 'boolean') data.isActive = tool.args.isActive;
+    if (repeat) {
+      data.repeatType = repeat.repeatType;
+      data.repeatDays = repeat.repeatDays;
+    }
+
+    const after: Record<string, unknown> = {};
+    if (data.title !== undefined) after.title = data.title;
+    if (data.description !== undefined) after.description = data.description;
+    if (data.projectId !== undefined) after.projectId = data.projectId;
+    if (data.priority !== undefined) after.priority = data.priority;
+    if (data.estimatedMinutes !== undefined) after.estimatedMinutes = data.estimatedMinutes;
+    if (data.isActive !== undefined) after.isActive = data.isActive;
+    if (data.repeatType !== undefined) after.repeatType = data.repeatType;
+    if (data.repeatDays !== undefined) after.repeatDays = data.repeatDays;
+
+    const diffs = this.buildDiffs(
+      {
+        title: routine.title,
+        description: routine.description,
+        projectId: routine.projectId,
+        priority: routine.priority,
+        estimatedMinutes: routine.estimatedMinutes,
+        isActive: routine.isActive,
+        repeatType: routine.repeatType,
+        repeatDays: routine.repeatDays,
+      },
+      after,
+      {
+        title: '제목',
+        description: '설명',
+        projectId: '프로젝트',
+        priority: '우선순위',
+        estimatedMinutes: '예상 시간',
+        isActive: '활성 상태',
+        repeatType: '반복 방식',
+        repeatDays: '반복 요일',
+      }
+    );
+
+    if (diffs.length === 0) throw new ValidationError('루틴에서 실제로 바뀔 내용이 없습니다.');
+    return { routine, data, diffs };
+  }
+
+  async enrichToolPlanPreview(preview: AgentToolPlanPreview, member: AgentMemberContext, scope?: AgentToolScope): Promise<AgentToolPlanPreview> {
+    const tools: AgentToolCallPreview[] = [];
+
+    for (const tool of preview.tools) {
+      if (tool.toolName === 'update_project') {
+        const prepared = await this.prepareUpdateProject(tool, member, scope);
+        tools.push({
+          ...tool,
+          summary: this.buildUpdateSummary('프로젝트', prepared.project.name, prepared.diffs),
+          args: { ...tool.args, targetId: prepared.project.id, projectId: prepared.project.id, diffs: prepared.diffs },
+        });
+        continue;
+      }
+
+      if (tool.toolName === 'update_meeting') {
+        const prepared = await this.prepareUpdateMeeting(tool, member, scope);
+        tools.push({
+          ...tool,
+          summary: this.buildUpdateSummary('회의자료', prepared.meeting.title, prepared.diffs),
+          args: { ...tool.args, targetId: String(prepared.meeting.id), meetingId: prepared.meeting.id, diffs: prepared.diffs },
+        });
+        continue;
+      }
+
+      if (tool.toolName === 'update_task') {
+        const prepared = await this.prepareUpdateTask(tool, member);
+        tools.push({
+          ...tool,
+          summary: this.buildUpdateSummary('업무', prepared.task.title, prepared.diffs),
+          args: { ...tool.args, targetId: prepared.task.id, taskId: prepared.task.id, diffs: prepared.diffs },
+        });
+        continue;
+      }
+
+      if (tool.toolName === 'update_routine') {
+        const prepared = await this.prepareUpdateRoutine(tool, member);
+        tools.push({
+          ...tool,
+          summary: this.buildUpdateSummary('루틴', prepared.routine.title, prepared.diffs),
+          args: { ...tool.args, targetId: prepared.routine.id, routineId: prepared.routine.id, diffs: prepared.diffs },
+        });
+        continue;
+      }
+
+      tools.push(tool);
+    }
+
+    return { ...preview, tools };
+  }
+
+  private async executeUpdateProject(tool: AgentToolCallPreview, member: AgentMemberContext, scope?: AgentToolScope) {
+    const prepared = await this.prepareUpdateProject(tool, member, scope);
+    const updated = await this.prisma.project.update({
+      where: { id: prepared.project.id },
+      data: prepared.data,
+      select: { id: true, name: true },
+    });
+    return { ...updated, diffs: prepared.diffs };
+  }
+
+  private async executeUpdateMeeting(tool: AgentToolCallPreview, member: AgentMemberContext, scope?: AgentToolScope) {
+    const prepared = await this.prepareUpdateMeeting(tool, member, scope);
+    const updated = await this.prisma.meeting.update({
+      where: { id: prepared.meeting.id },
+      data: prepared.data,
+      select: { id: true, title: true, projectId: true },
+    });
+    return { ...updated, diffs: prepared.diffs };
+  }
+
+  private async executeUpdateTask(tool: AgentToolCallPreview, member: AgentMemberContext) {
+    const prepared = await this.prepareUpdateTask(tool, member);
+    const updated = await this.prisma.task.update({
+      where: { id: prepared.task.id },
+      data: prepared.data,
+      select: { id: true, title: true, projectId: true },
+    });
+    await this.activityLogService.create({
+      taskId: prepared.task.id,
+      memberId: member.id,
+      action: 'updated',
+      details: {
+        source: 'ai_tool_plan',
+        diffs: prepared.diffs,
+      },
+    });
+    return { ...updated, diffs: prepared.diffs };
+  }
+
+  private async executeUpdateRoutine(tool: AgentToolCallPreview, member: AgentMemberContext) {
+    const prepared = await this.prepareUpdateRoutine(tool, member);
+    const updated = await this.prisma.routineTask.update({
+      where: { id: prepared.routine.id },
+      data: prepared.data,
+      select: { id: true, title: true, projectId: true, repeatType: true, repeatDays: true },
+    });
+    return { ...updated, diffs: prepared.diffs };
+  }
+
   async executeToolPlan(action: AgentToolActionRow, member: AgentMemberContext) {
     const preview = this.toToolPlanPreview(action.preview);
+    const actionScope: AgentToolScope = {
+      type: ['PROJECT', 'MEETING'].includes(action.scopeType) ? action.scopeType as AgentToolScope['type'] : 'GLOBAL',
+      id: action.scopeId || undefined,
+      label: action.scopeLabel || '전체',
+      projectId: action.scopeType === 'PROJECT' && action.scopeId ? action.scopeId : undefined,
+      meetingId: action.scopeType === 'MEETING' ? this.parseNumberId(action.scopeId) || undefined : undefined,
+    };
     let currentProjectId: string | null = null;
     const createdProjects = [];
     const createdTeams = [];
     const createdMeetings = [];
     const createdTasks = [];
     const createdRoutines = [];
+    const updatedProjects = [];
+    const updatedMeetings = [];
+    const updatedTasks = [];
+    const updatedRoutines = [];
 
     for (const tool of preview.tools) {
       if (tool.toolName === 'create_project') {
@@ -766,15 +1384,44 @@ export class AgentToolRegistry {
         if (routine.projectId) currentProjectId = routine.projectId;
         createdRoutines.push(routine);
       }
+
+      if (tool.toolName === 'update_project') {
+        const project = await this.executeUpdateProject(tool, member, actionScope);
+        currentProjectId = project.id;
+        updatedProjects.push(project);
+      }
+
+      if (tool.toolName === 'update_meeting') {
+        const meeting = await this.executeUpdateMeeting(tool, member, actionScope);
+        if (meeting.projectId) currentProjectId = meeting.projectId;
+        updatedMeetings.push(meeting);
+      }
+
+      if (tool.toolName === 'update_task') {
+        const task = await this.executeUpdateTask(tool, member);
+        currentProjectId = task.projectId;
+        updatedTasks.push(task);
+      }
+
+      if (tool.toolName === 'update_routine') {
+        const routine = await this.executeUpdateRoutine(tool, member);
+        if (routine.projectId) currentProjectId = routine.projectId;
+        updatedRoutines.push(routine);
+      }
     }
 
     return {
       createdCount: createdProjects.length + createdTeams.length + createdMeetings.length + createdTasks.length + createdRoutines.length,
+      updatedCount: updatedProjects.length + updatedMeetings.length + updatedTasks.length + updatedRoutines.length,
       projects: createdProjects,
       teams: createdTeams,
       meetings: createdMeetings,
       tasks: createdTasks,
       routines: createdRoutines,
+      updatedProjects,
+      updatedMeetings,
+      updatedTasks,
+      updatedRoutines,
     };
   }
 }

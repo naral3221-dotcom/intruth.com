@@ -159,6 +159,18 @@ function getActionToolLines(action: AiAgentAction) {
   });
 }
 
+function getActionDiffLines(action: AiAgentAction) {
+  if (action.preview.type !== "TOOL_PLAN") return [];
+
+  return action.preview.tools.flatMap((tool) =>
+    (tool.args.diffs || []).map((diff) => {
+      const before = diff.before || "비어 있음";
+      const after = diff.after || "비어 있음";
+      return `${tool.label} · ${diff.label}: ${before} -> ${after}`;
+    })
+  );
+}
+
 function isAgentExecutionCommand(command: string) {
   const normalized = command.toLowerCase();
   const hasWriteTarget = containsAny(normalized, [
@@ -185,6 +197,19 @@ function isAgentExecutionCommand(command: string) {
     "준비",
     "실행",
     "세팅",
+    "수정",
+    "변경",
+    "바꿔",
+    "고쳐",
+    "업데이트",
+    "완료",
+    "마감",
+    "담당",
+    "옮겨",
+    "update",
+    "change",
+    "edit",
+    "done",
   ]);
 
   return hasWriteTarget && hasWriteVerb && !containsAny(normalized, ["창", "모달"]);
@@ -824,11 +849,21 @@ export function AgentCommandCenter() {
             result.result.routines?.length ? `루틴 ${result.result.routines.length}개` : null,
           ].filter(Boolean).join(", ")
         : "";
+      const updateSummary = result.result
+        ? [
+            result.result.updatedProjects?.length ? `프로젝트 ${result.result.updatedProjects.length}개` : null,
+            result.result.updatedMeetings?.length ? `회의자료 ${result.result.updatedMeetings.length}개` : null,
+            result.result.updatedTasks?.length ? `업무 ${result.result.updatedTasks.length}개` : null,
+            result.result.updatedRoutines?.length ? `루틴 ${result.result.updatedRoutines.length}개` : null,
+          ].filter(Boolean).join(", ")
+        : "";
 
       appendMessage(
-        createMessage("assistant", resultSummary
-          ? `${resultSummary}를 실제 데이터로 생성했어요.`
-          : `${result.createdCount}개 항목을 실제 데이터로 생성했어요.`, {
+        createMessage("assistant", updateSummary
+          ? `${updateSummary}를 실제 데이터로 수정했어요.`
+          : resultSummary
+            ? `${resultSummary}를 실제 데이터로 생성했어요.`
+            : `${result.createdCount}개 항목을 실제 데이터로 처리했어요.`, {
           quickActions: [
             { label: "업무 보드로 이동", command: "업무 보드로 이동" },
             { label: "회의자료로 이동", command: "회의 페이지로 이동" },
@@ -935,6 +970,7 @@ export function AgentCommandCenter() {
                     <div className="mt-2 space-y-2">
                       {message.actions.map((action) => {
                         const canReview = action.status === "PENDING_APPROVAL";
+                        const diffLines = getActionDiffLines(action);
                         return (
                           <div key={action.id} className="rounded-2xl border border-border bg-card p-3 text-left shadow-sm">
                             <div className="flex items-start gap-2">
@@ -954,6 +990,15 @@ export function AgentCommandCenter() {
                                     </p>
                                   ))}
                                 </div>
+                                {diffLines.length > 0 && (
+                                  <div className="mt-2 space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-2 text-[11px] leading-4 text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/20 dark:text-amber-100">
+                                    {diffLines.slice(0, 6).map((line) => (
+                                      <p key={`${action.id}-diff-${line}`} className="line-clamp-2">
+                                        {line}
+                                      </p>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className="mt-3 flex gap-2">
