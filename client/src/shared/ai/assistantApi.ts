@@ -7,6 +7,7 @@ import type {
   ApproveAiAgentActionResult,
   CreateAiTaskDraftActionResult,
   CreateAiToolPlanActionResult,
+  Meeting,
   SaveAiCommandMessageInput,
 } from '@/types';
 
@@ -191,6 +192,21 @@ export async function approveAiAgentAction(actionId: number): Promise<ApproveAiA
   const token = getToken();
   const response = await requestAi(`/ai/assistant/actions/${actionId}/approve`, {
     method: 'POST',
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    await throwAiError(response);
+  }
+
+  return response.json();
+}
+
+export async function getMeetingForAiShare(meetingId: number): Promise<Meeting> {
+  const token = getToken();
+  const response = await requestAi(`/meetings/${meetingId}`, {
     headers: {
       ...(token && { Authorization: `Bearer ${token}` }),
     },

@@ -535,13 +535,27 @@ export type AiAgentToolName =
   | 'update_project'
   | 'update_meeting'
   | 'update_task'
-  | 'update_routine';
+  | 'update_routine'
+  | 'prepare_kakao_share'
+  | 'prepare_meeting_pdf';
 
 export interface AiAgentDiffItem {
   field: string;
   label: string;
   before: string | null;
   after: string | null;
+}
+
+export interface AiAgentShareIntent {
+  id: string;
+  type: 'kakao_text' | 'meeting_pdf';
+  title: string;
+  text: string;
+  path: string;
+  buttonTitle?: string | null;
+  entityType?: 'project' | 'task' | 'meeting' | 'routine' | 'generic';
+  entityId?: string | null;
+  meetingId?: number | null;
 }
 
 export interface AiAgentToolCallPreview {
@@ -565,6 +579,9 @@ export interface AiAgentToolCallPreview {
     color?: string | null;
     status?: string | null;
     dueDate?: string | null;
+    targetType?: string | null;
+    buttonTitle?: string | null;
+    path?: string | null;
     priority?: TaskPriority | string | null;
     repeatType?: RepeatType | string | null;
     repeatDays?: number[];
@@ -598,6 +615,7 @@ export interface AiAgentAction {
   result?: {
     createdCount?: number;
     updatedCount?: number;
+    shareCount?: number;
     tasks?: Array<{ id: string; title: string; projectId: string }>;
     projects?: Array<{ id: string; name: string }>;
     meetings?: Array<{ id: number; title: string; projectId?: string | null }>;
@@ -607,6 +625,7 @@ export interface AiAgentAction {
     updatedProjects?: Array<{ id: string; name: string; diffs?: AiAgentDiffItem[] }>;
     updatedMeetings?: Array<{ id: number; title: string; projectId?: string | null; diffs?: AiAgentDiffItem[] }>;
     updatedRoutines?: Array<{ id: string; title: string; projectId?: string | null; repeatType?: string; repeatDays?: number[]; diffs?: AiAgentDiffItem[] }>;
+    shareIntents?: AiAgentShareIntent[];
   } | null;
   errorMessage?: string | null;
   reviewedById?: string | null;

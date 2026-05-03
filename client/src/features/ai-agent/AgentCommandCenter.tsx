@@ -6,9 +6,11 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Eraser,
+  FileText,
   Loader2,
   MessageCircle,
   Send,
+  Share2,
   Sparkles,
   UserRound,
   X,
@@ -22,13 +24,18 @@ import {
   clearAiCommandMessages,
   createAiTaskDraftAction,
   createAiToolPlanAction,
+  getMeetingForAiShare,
   listAiAgentActions,
   listAiAssistantRuns,
   listAiCommandMessages,
   rejectAiAgentAction,
   saveAiCommandMessage,
 } from "@/shared/ai/assistantApi";
-import type { AiAgentAction, AiAssistantHistoryItem, AiCommandMessage } from "@/types";
+import { shareKakaoText, type ShareResult } from "@/shared/share/kakaoShare";
+import { createShareUrl } from "@/shared/share/shareConfig";
+import { generateMeetingPdfFile } from "@/shared/share/meetingPdf";
+import { shareFileOrDownload } from "@/shared/share/nativeFileShare";
+import type { AiAgentAction, AiAgentShareIntent, AiAssistantHistoryItem, AiCommandMessage } from "@/types";
 
 type QuickAction = {
   label: string;
@@ -171,6 +178,25 @@ function getActionDiffLines(action: AiAgentAction) {
   );
 }
 
+function getActionShareIntents(action: AiAgentAction) {
+  return action.status === "EXECUTED" ? action.result?.shareIntents || [] : [];
+}
+
+function shareResultMessage(result: ShareResult) {
+  switch (result) {
+    case "kakao":
+      return "카카오톡 공유창을 열었어요.";
+    case "native":
+      return "공유창을 열었어요. 카카오톡을 선택하면 바로 보낼 수 있어요.";
+    case "copied":
+      return "공유 문구를 클립보드에 복사했어요.";
+    case "downloaded":
+      return "파일을 다운로드했어요. 카카오톡에 첨부해서 보낼 수 있어요.";
+    default:
+      return "이 기기에서는 공유를 바로 열 수 없었어요.";
+  }
+}
+
 function isAgentExecutionCommand(command: string) {
   const normalized = command.toLowerCase();
   const hasWriteTarget = containsAny(normalized, [
@@ -187,6 +213,11 @@ function isAgentExecutionCommand(command: string) {
     "그룹",
     "task",
     "routine",
+    "카카오",
+    "공유",
+    "pdf",
+    "PDF",
+    "파일",
   ]);
   const hasWriteVerb = containsAny(normalized, [
     "만들",
@@ -210,6 +241,11 @@ function isAgentExecutionCommand(command: string) {
     "change",
     "edit",
     "done",
+    "공유",
+    "보내",
+    "전송",
+    "share",
+    "pdf",
   ]);
 
   return hasWriteTarget && hasWriteVerb && !containsAny(normalized, ["창", "모달"]);
@@ -511,6 +547,7 @@ export function AgentCommandCenter() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [reviewingActionId, setReviewingActionId] = useState<number | null>(null);
+  const [sharingIntentId, setSharingIntentId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AgentMessage[]>(() => restoreConversation(chatStorageKey, pendingStorageKey));
 
   const {
@@ -857,13 +894,18 @@ export function AgentCommandCenter() {
             result.result.updatedRoutines?.length ? `루틴 ${result.result.updatedRoutines.length}개` : null,
           ].filter(Boolean).join(", ")
         : "";
+      const shareSummary = result.result?.shareIntents?.length
+        ? `공유 준비 ${result.result.shareIntents.length}개`
+        : "";
 
       appendMessage(
-        createMessage("assistant", updateSummary
-          ? `${updateSummary}를 실제 데이터로 수정했어요.`
-          : resultSummary
-            ? `${resultSummary}를 실제 데이터로 생성했어요.`
-            : `${result.createdCount}개 항목을 실제 데이터로 처리했어요.`, {
+        createMessage("assistant", shareSummary
+          ? `${shareSummary}가 완료됐어요. 아래 카드에서 바로 공유할 수 있어요.`
+          : updateSummary
+            ? `${updateSummary}를 실제 데이터로 수정했어요.`
+            : resultSummary
+              ? `${resultSummary}를 실제 데이터로 생성했어요.`
+              : `${result.createdCount}개 항목을 실제 데이터로 처리했어요.`, {
           quickActions: [
             { label: "업무 보드로 이동", command: "업무 보드로 이동" },
             { label: "회의자료로 이동", command: "회의 페이지로 이동" },
@@ -874,6 +916,39 @@ export function AgentCommandCenter() {
       appendMessage(createMessage("assistant", error instanceof Error ? error.message : "승인 실행에 실패했어요."));
     } finally {
       setReviewingActionId(null);
+    }
+  };
+
+  const handleShareIntent = async (intent: AiAgentShareIntent) => {
+    setSharingIntentId(intent.id);
+    try {
+      const result = intent.type === "meeting_pdf"
+        ? await (async () => {
+            if (!intent.meetingId) throw new Error("PDF로 만들 회의자료 ID가 없습니다.");
+            const meeting = await getMeetingForAiShare(intent.meetingId);
+            const file = await generateMeetingPdfFile(meeting);
+            return shareFileOrDownload({ file, title: intent.title, text: intent.text });
+          })()
+        : await shareKakaoText({
+            title: intent.title,
+            text: intent.text,
+            url: createShareUrl(intent.path || "/"),
+            buttonTitle: intent.buttonTitle || "열기",
+            serverCallbackArgs: {
+              type: intent.entityType || "ai-share",
+              id: intent.entityId || intent.id,
+            },
+          });
+
+      appendMessage(createMessage("assistant", shareResultMessage(result)), { persist: false });
+    } catch (error) {
+      appendMessage(
+        createMessage("assistant", error instanceof Error ? error.message : "공유를 실행하지 못했어요.", {
+          quickActions: [{ label: "다시 공유 준비", command: "이 내용을 카카오톡으로 공유 준비해줘" }],
+        })
+      );
+    } finally {
+      setSharingIntentId(null);
     }
   };
 
@@ -971,6 +1046,7 @@ export function AgentCommandCenter() {
                       {message.actions.map((action) => {
                         const canReview = action.status === "PENDING_APPROVAL";
                         const diffLines = getActionDiffLines(action);
+                        const shareIntents = getActionShareIntents(action);
                         return (
                           <div key={action.id} className="rounded-2xl border border-border bg-card p-3 text-left shadow-sm">
                             <div className="flex items-start gap-2">
@@ -997,6 +1073,32 @@ export function AgentCommandCenter() {
                                         {line}
                                       </p>
                                     ))}
+                                  </div>
+                                )}
+                                {shareIntents.length > 0 && (
+                                  <div className="mt-2 grid gap-2">
+                                    {shareIntents.map((intent) => {
+                                      const isPdf = intent.type === "meeting_pdf";
+                                      const isSharing = sharingIntentId === intent.id;
+                                      return (
+                                        <button
+                                          key={`${action.id}-${intent.id}`}
+                                          type="button"
+                                          onClick={() => void handleShareIntent(intent)}
+                                          disabled={Boolean(sharingIntentId)}
+                                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 text-xs font-semibold text-primary transition hover:bg-primary/10 disabled:opacity-50"
+                                        >
+                                          {isSharing ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          ) : isPdf ? (
+                                            <FileText className="h-3.5 w-3.5" />
+                                          ) : (
+                                            <Share2 className="h-3.5 w-3.5" />
+                                          )}
+                                          {intent.buttonTitle || (isPdf ? "PDF 공유" : "카카오 공유")}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </div>

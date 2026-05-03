@@ -1,7 +1,7 @@
 # INTRUTH AI Agentic Roadmap
 
 > 작성일: 2026-04-30
-> 구현 상태: 회의 녹음 업로드, 서버 저장, OpenAI 전사, 회의자료 초안 생성/검토/적용, 회의 할 일 업무 전환, 읽기 전용 AI Assistant, 범위 선택, 사용량 기록, 승인 기반 생성 Agent, 프로젝트/회의자료/업무/루틴 수정 diff 승인 실행까지 완료.
+> 구현 상태: 회의 녹음 업로드, 서버 저장, OpenAI 전사, 회의자료 초안 생성/검토/적용, 회의 할 일 업무 전환, 읽기 전용 AI Assistant, 범위 선택, 사용량 기록, 승인 기반 생성 Agent, 프로젝트/회의자료/업무/루틴 수정 diff 승인 실행, 카카오/PDF 공유 준비 Tool Plan까지 완료.
 > 목적: INTRUTH를 교회 리더십 운영 도구에서 회의 기록, 업무 생성, 일정 관리, 브리핑, 아이디어 제안까지 돕는 AI 사역 운영 비서로 확장하기 위한 기획안.
 
 ---
@@ -229,10 +229,12 @@ AI가 직접 데이터베이스를 만지게 하지 않고, 서버의 안전한 
 - `update_meeting`
 - `create_routine`
 - `update_routine`
-- `attach_meeting_pdf`
-- `share_kakao_link`
+- `prepare_meeting_pdf`
+- `prepare_kakao_share`
 
 현재 구현된 쓰기 도구는 모두 `AiAgentAction` 승인 대기 카드로 저장되고, 수정 도구는 서버가 DB에서 변경 전 값을 다시 읽어 diff를 계산한 뒤 승인 카드에 표시한다. 승인 이후 실행 단계에서도 동일한 권한 검증과 diff 계산을 다시 수행한다.
+
+공유 도구는 서버에서 권한을 검증하고 공유 payload만 준비한다. 실제 카카오톡 공유, Web Share, PDF 파일 생성/공유/다운로드는 모바일 브라우저의 클라이언트 버튼에서 수행한다.
 
 ### Restricted Tools
 

@@ -11,7 +11,9 @@ export type AgentToolName =
   | 'update_project'
   | 'update_meeting'
   | 'update_task'
-  | 'update_routine';
+  | 'update_routine'
+  | 'prepare_kakao_share'
+  | 'prepare_meeting_pdf';
 
 export interface AgentMemberContext {
   id: string;
@@ -47,6 +49,18 @@ export interface AgentDiffItem {
   after: string | null;
 }
 
+export interface AgentShareIntent {
+  id: string;
+  type: 'kakao_text' | 'meeting_pdf';
+  title: string;
+  text: string;
+  path: string;
+  buttonTitle?: string | null;
+  entityType?: 'project' | 'task' | 'meeting' | 'routine' | 'generic';
+  entityId?: string | null;
+  meetingId?: number | null;
+}
+
 export interface AgentToolCallPreview {
   id: string;
   toolName: AgentToolName;
@@ -68,6 +82,9 @@ export interface AgentToolCallPreview {
     color?: string | null;
     status?: string | null;
     dueDate?: string | null;
+    targetType?: string | null;
+    buttonTitle?: string | null;
+    path?: string | null;
     priority?: string | null;
     repeatType?: string | null;
     repeatDays?: number[];
@@ -121,6 +138,8 @@ const AGENT_TOOL_NAMES = new Set<AgentToolName>([
   'update_meeting',
   'update_task',
   'update_routine',
+  'prepare_kakao_share',
+  'prepare_meeting_pdf',
 ]);
 const WEEKDAY_OFFSETS: Record<string, number> = {
   일요일: 0,
@@ -201,6 +220,16 @@ export class AgentToolRegistry {
       {
         name: 'update_routine',
         description: '기존 반복 업무 루틴의 제목, 설명, 반복 요일, 우선순위, 예상 시간, 활성 상태를 수정합니다. targetId 또는 routineId가 필요합니다.',
+        approvalRequired: true,
+      },
+      {
+        name: 'prepare_kakao_share',
+        description: '프로젝트, 업무, 회의자료, 루틴 또는 직접 작성한 문구를 카카오톡/Web Share/클립보드 공유용 payload로 준비합니다. 실제 전송은 클라이언트 버튼으로 수행합니다.',
+        approvalRequired: true,
+      },
+      {
+        name: 'prepare_meeting_pdf',
+        description: '회의자료를 PDF 파일 공유/다운로드용 payload로 준비합니다. 실제 PDF 생성과 카카오/네이티브 파일 공유는 클라이언트에서 수행합니다.',
         approvalRequired: true,
       },
     ];
@@ -300,6 +329,48 @@ export class AgentToolRegistry {
   private buildUpdateSummary(entityLabel: string, title: string, diffs: AgentDiffItem[]) {
     const fields = diffs.map((diff) => diff.label).join(', ');
     return `${entityLabel} "${title}"의 ${fields}을(를) 수정합니다.`;
+  }
+
+  private compactShareText(value: unknown, fallback = '') {
+    const text = compactWhitespace(String(value || fallback));
+    return text.length > 900 ? `${text.slice(0, 897)}...` : text;
+  }
+
+  private formatDateForShare(value?: Date | null) {
+    if (!value) return '일시 미정';
+    return value.toLocaleString('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      month: 'short',
+      day: 'numeric',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  private formatDateOnlyForShare(value?: Date | null) {
+    if (!value) return '마감 없음';
+    return value.toLocaleDateString('ko-KR', {
+      timeZone: 'Asia/Seoul',
+      month: 'short',
+      day: 'numeric',
+      weekday: 'short',
+    });
+  }
+
+  private stripHtml(value?: string | null) {
+    return String(value || '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private shareIntentId(type: AgentShareIntent['type'], entityType: string, entityId: string | number) {
+    return `${type}-${entityType}-${entityId}-${Date.now().toString(36)}`;
   }
 
   private normalizePersonName(value: unknown) {
@@ -1336,6 +1407,280 @@ export class AgentToolRegistry {
     return { ...updated, diffs: prepared.diffs };
   }
 
+  private inferShareTarget(tool: AgentToolCallPreview, scope?: AgentToolScope) {
+    const targetType = this.optionalText(tool.args.targetType, 40)?.toLowerCase() || null;
+    const targetId = this.optionalText(tool.args.targetId, 120) || null;
+
+    if (targetType) return { targetType, targetId };
+    if (tool.args.taskId) return { targetType: 'task', targetId: String(tool.args.taskId) };
+    if (tool.args.meetingId || scope?.meetingId) return { targetType: 'meeting', targetId: String(tool.args.meetingId || scope?.meetingId) };
+    if (tool.args.routineId) return { targetType: 'routine', targetId: String(tool.args.routineId) };
+    if (tool.args.projectId || scope?.projectId) return { targetType: 'project', targetId: String(tool.args.projectId || scope?.projectId) };
+    if (targetId) return { targetType: 'project', targetId };
+    return { targetType: 'generic', targetId: null };
+  }
+
+  private async ensureTaskReadable(taskId: string, member: AgentMemberContext) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        dueDate: true,
+        assigneeId: true,
+        reporterId: true,
+        projectId: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            ownerId: true,
+            owner: { select: { id: true, name: true, email: true, username: true, isActive: true } },
+            members: {
+              select: {
+                memberId: true,
+                member: { select: { id: true, name: true, email: true, username: true, isActive: true } },
+              },
+            },
+          },
+        },
+        assignee: { select: { id: true, name: true } },
+      },
+    });
+    if (!task) throw new ValidationError('공유할 업무를 찾을 수 없습니다.');
+
+    const canRead = this.isAdmin(member)
+      || this.canAccessProject(task.project, member)
+      || task.assigneeId === member.id
+      || task.reporterId === member.id;
+    if (!canRead) throw new ForbiddenError('선택한 업무를 공유할 권한이 없습니다.');
+    return task;
+  }
+
+  private async ensureMeetingReadable(meetingId: number, member: AgentMemberContext) {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: {
+        id: true,
+        title: true,
+        meetingDate: true,
+        content: true,
+        summary: true,
+        projectId: true,
+        team: { select: { id: true, name: true, color: true } },
+        authorId: true,
+        attendees: { select: { memberId: true } },
+        actionItems: {
+          select: {
+            title: true,
+            status: true,
+            priority: true,
+            dueDate: true,
+          },
+          take: 8,
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+    if (!meeting) throw new ValidationError('공유할 회의자료를 찾을 수 없습니다.');
+
+    const canReadByMeeting = this.isAdmin(member)
+      || meeting.authorId === member.id
+      || meeting.attendees.some((attendee) => attendee.memberId === member.id);
+    const canReadByProject = meeting.projectId
+      ? this.canAccessProject(await this.findProjectForAccess(meeting.projectId), member)
+      : false;
+    if (!canReadByMeeting && !canReadByProject) throw new ForbiddenError('선택한 회의자료를 공유할 권한이 없습니다.');
+    return meeting;
+  }
+
+  private async ensureRoutineReadable(routineId: string, member: AgentMemberContext) {
+    const routine = await this.prisma.routineTask.findUnique({
+      where: { id: routineId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        repeatType: true,
+        repeatDays: true,
+        projectId: true,
+        priority: true,
+        estimatedMinutes: true,
+        isActive: true,
+        createdById: true,
+        assignees: {
+          select: {
+            memberId: true,
+            member: { select: { id: true, name: true } },
+          },
+        },
+        project: {
+          select: {
+            id: true,
+            name: true,
+            ownerId: true,
+            members: { select: { memberId: true } },
+          },
+        },
+      },
+    });
+    if (!routine) throw new ValidationError('공유할 루틴을 찾을 수 없습니다.');
+
+    const canRead = this.isAdmin(member)
+      || routine.createdById === member.id
+      || routine.assignees.some((assignee) => assignee.memberId === member.id)
+      || (routine.project ? this.canAccessProject(routine.project, member) : false);
+    if (!canRead) throw new ForbiddenError('선택한 루틴을 공유할 권한이 없습니다.');
+    return routine;
+  }
+
+  private buildProjectShareIntent(project: Awaited<ReturnType<AgentToolRegistry['findProjectForAccess']>>, tool: AgentToolCallPreview): AgentShareIntent {
+    const title = this.optionalText(tool.args.title, 120) || project.name;
+    const body = this.compactShareText(tool.args.content, this.stripHtml(project.description) || '프로젝트 내용을 확인해주세요.');
+    return {
+      id: this.shareIntentId('kakao_text', 'project', project.id),
+      type: 'kakao_text',
+      title,
+      text: [`[프로젝트] ${project.name}`, `상태: ${project.status}`, body].join('\n'),
+      path: `/projects?projectId=${project.id}`,
+      buttonTitle: this.optionalText(tool.args.buttonTitle, 40) || '프로젝트 보기',
+      entityType: 'project',
+      entityId: project.id,
+    };
+  }
+
+  private buildTaskShareIntent(task: Awaited<ReturnType<AgentToolRegistry['ensureTaskReadable']>>, tool: AgentToolCallPreview): AgentShareIntent {
+    const title = this.optionalText(tool.args.title, 120) || task.title;
+    const body = this.compactShareText(tool.args.content, this.stripHtml(task.description) || '업무 내용을 확인해주세요.');
+    return {
+      id: this.shareIntentId('kakao_text', 'task', task.id),
+      type: 'kakao_text',
+      title,
+      text: [
+        `[업무] ${task.title}`,
+        `프로젝트: ${task.project.name}`,
+        task.assignee?.name ? `담당: ${task.assignee.name}` : '담당자 없음',
+        `상태: ${task.status} · 우선순위: ${task.priority}`,
+        `마감: ${this.formatDateOnlyForShare(task.dueDate)}`,
+        body,
+      ].join('\n'),
+      path: `/tasks?taskId=${task.id}`,
+      buttonTitle: this.optionalText(tool.args.buttonTitle, 40) || '업무 보기',
+      entityType: 'task',
+      entityId: task.id,
+    };
+  }
+
+  private buildMeetingShareIntent(meeting: Awaited<ReturnType<AgentToolRegistry['ensureMeetingReadable']>>, tool: AgentToolCallPreview): AgentShareIntent {
+    const title = this.optionalText(tool.args.title, 120) || meeting.title;
+    const body = this.compactShareText(tool.args.content, this.stripHtml(meeting.summary || meeting.content) || '회의자료를 확인해주세요.');
+    const actionLines = meeting.actionItems.length
+      ? `\n할 일: ${meeting.actionItems.map((item) => item.title).join(', ')}`
+      : '';
+    return {
+      id: this.shareIntentId('kakao_text', 'meeting', meeting.id),
+      type: 'kakao_text',
+      title,
+      text: [
+        `[회의] ${meeting.title}`,
+        this.formatDateForShare(meeting.meetingDate),
+        meeting.team?.name ? `팀: ${meeting.team.name}` : null,
+        `${body}${actionLines}`,
+      ].filter(Boolean).join('\n'),
+      path: `/meetings/${meeting.id}`,
+      buttonTitle: this.optionalText(tool.args.buttonTitle, 40) || '회의 보기',
+      entityType: 'meeting',
+      entityId: String(meeting.id),
+      meetingId: meeting.id,
+    };
+  }
+
+  private buildRoutineShareIntent(routine: Awaited<ReturnType<AgentToolRegistry['ensureRoutineReadable']>>, tool: AgentToolCallPreview): AgentShareIntent {
+    const title = this.optionalText(tool.args.title, 120) || routine.title;
+    const body = this.compactShareText(tool.args.content, this.stripHtml(routine.description) || '반복 업무 루틴을 확인해주세요.');
+    const assigneeText = routine.assignees.map((assignee) => assignee.member.name).join(', ') || '담당자 없음';
+    return {
+      id: this.shareIntentId('kakao_text', 'routine', routine.id),
+      type: 'kakao_text',
+      title,
+      text: [
+        `[루틴] ${routine.title}`,
+        routine.project?.name ? `프로젝트: ${routine.project.name}` : null,
+        `반복: ${routine.repeatType} (${routine.repeatDays.join(', ')})`,
+        `담당: ${assigneeText}`,
+        `우선순위: ${routine.priority}`,
+        body,
+      ].filter(Boolean).join('\n'),
+      path: '/my-tasks',
+      buttonTitle: this.optionalText(tool.args.buttonTitle, 40) || '루틴 보기',
+      entityType: 'routine',
+      entityId: routine.id,
+    };
+  }
+
+  private async executePrepareKakaoShare(tool: AgentToolCallPreview, member: AgentMemberContext, scope?: AgentToolScope): Promise<AgentShareIntent> {
+    const { targetType, targetId } = this.inferShareTarget(tool, scope);
+
+    if (targetType === 'project') {
+      const projectId = targetId || tool.args.projectId || scope?.projectId;
+      if (!projectId) throw new ValidationError('공유할 프로젝트 ID가 필요합니다.');
+      const project = await this.findProjectForAccess(projectId);
+      if (!this.canAccessProject(project, member)) throw new ForbiddenError('선택한 프로젝트를 공유할 권한이 없습니다.');
+      return this.buildProjectShareIntent(project, tool);
+    }
+
+    if (targetType === 'task') {
+      const taskId = targetId || tool.args.taskId;
+      if (!taskId) throw new ValidationError('공유할 업무 ID가 필요합니다.');
+      return this.buildTaskShareIntent(await this.ensureTaskReadable(taskId, member), tool);
+    }
+
+    if (targetType === 'meeting') {
+      const meetingId = this.parseNumberId(targetId || tool.args.meetingId || scope?.meetingId);
+      if (!meetingId) throw new ValidationError('공유할 회의자료 ID가 필요합니다.');
+      return this.buildMeetingShareIntent(await this.ensureMeetingReadable(meetingId, member), tool);
+    }
+
+    if (targetType === 'routine') {
+      const routineId = targetId || tool.args.routineId;
+      if (!routineId) throw new ValidationError('공유할 루틴 ID가 필요합니다.');
+      return this.buildRoutineShareIntent(await this.ensureRoutineReadable(routineId, member), tool);
+    }
+
+    const title = this.optionalText(tool.args.title, 120) || 'INTRUTH 공유';
+    const text = this.compactShareText(tool.args.content || tool.args.description, '공유할 내용을 확인해주세요.');
+    return {
+      id: this.shareIntentId('kakao_text', 'generic', 'manual'),
+      type: 'kakao_text',
+      title,
+      text,
+      path: this.optionalText(tool.args.path, 200) || '/',
+      buttonTitle: this.optionalText(tool.args.buttonTitle, 40) || 'INTRUTH 열기',
+      entityType: 'generic',
+      entityId: null,
+    };
+  }
+
+  private async executePrepareMeetingPdf(tool: AgentToolCallPreview, member: AgentMemberContext, scope?: AgentToolScope): Promise<AgentShareIntent> {
+    const meetingId = this.parseNumberId(tool.args.meetingId || tool.args.targetId || scope?.meetingId);
+    if (!meetingId) throw new ValidationError('PDF로 만들 회의자료 ID가 필요합니다.');
+    const meeting = await this.ensureMeetingReadable(meetingId, member);
+    return {
+      id: this.shareIntentId('meeting_pdf', 'meeting', meeting.id),
+      type: 'meeting_pdf',
+      title: this.optionalText(tool.args.title, 120) || `${meeting.title} PDF`,
+      text: this.compactShareText(tool.args.content || tool.args.description, `${meeting.title} 회의자료 PDF입니다.`),
+      path: `/meetings/${meeting.id}`,
+      buttonTitle: this.optionalText(tool.args.buttonTitle, 40) || 'PDF 공유',
+      entityType: 'meeting',
+      entityId: String(meeting.id),
+      meetingId: meeting.id,
+    };
+  }
+
   async executeToolPlan(action: AgentToolActionRow, member: AgentMemberContext) {
     const preview = this.toToolPlanPreview(action.preview);
     const actionScope: AgentToolScope = {
@@ -1346,6 +1691,7 @@ export class AgentToolRegistry {
       meetingId: action.scopeType === 'MEETING' ? this.parseNumberId(action.scopeId) || undefined : undefined,
     };
     let currentProjectId: string | null = null;
+    let currentMeetingId: number | null = null;
     const createdProjects = [];
     const createdTeams = [];
     const createdMeetings = [];
@@ -1355,6 +1701,7 @@ export class AgentToolRegistry {
     const updatedMeetings = [];
     const updatedTasks = [];
     const updatedRoutines = [];
+    const shareIntents: AgentShareIntent[] = [];
 
     for (const tool of preview.tools) {
       if (tool.toolName === 'create_project') {
@@ -1370,6 +1717,7 @@ export class AgentToolRegistry {
 
       if (tool.toolName === 'create_meeting') {
         const meeting = await this.executeCreateMeeting(tool, member, currentProjectId);
+        currentMeetingId = meeting.id;
         createdMeetings.push(meeting);
       }
 
@@ -1393,6 +1741,7 @@ export class AgentToolRegistry {
 
       if (tool.toolName === 'update_meeting') {
         const meeting = await this.executeUpdateMeeting(tool, member, actionScope);
+        currentMeetingId = meeting.id;
         if (meeting.projectId) currentProjectId = meeting.projectId;
         updatedMeetings.push(meeting);
       }
@@ -1408,11 +1757,28 @@ export class AgentToolRegistry {
         if (routine.projectId) currentProjectId = routine.projectId;
         updatedRoutines.push(routine);
       }
+
+      if (tool.toolName === 'prepare_kakao_share') {
+        shareIntents.push(await this.executePrepareKakaoShare(tool, member, {
+          ...actionScope,
+          projectId: currentProjectId || actionScope.projectId,
+          meetingId: currentMeetingId || actionScope.meetingId,
+        }));
+      }
+
+      if (tool.toolName === 'prepare_meeting_pdf') {
+        shareIntents.push(await this.executePrepareMeetingPdf(tool, member, {
+          ...actionScope,
+          projectId: currentProjectId || actionScope.projectId,
+          meetingId: currentMeetingId || actionScope.meetingId,
+        }));
+      }
     }
 
     return {
       createdCount: createdProjects.length + createdTeams.length + createdMeetings.length + createdTasks.length + createdRoutines.length,
       updatedCount: updatedProjects.length + updatedMeetings.length + updatedTasks.length + updatedRoutines.length,
+      shareCount: shareIntents.length,
       projects: createdProjects,
       teams: createdTeams,
       meetings: createdMeetings,
@@ -1422,6 +1788,7 @@ export class AgentToolRegistry {
       updatedMeetings,
       updatedTasks,
       updatedRoutines,
+      shareIntents,
     };
   }
 }
