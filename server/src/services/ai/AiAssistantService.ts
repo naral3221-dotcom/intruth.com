@@ -1355,6 +1355,7 @@ export class AiAssistantService {
     model: string;
     payload: Record<string, unknown>;
     fallbackLabel: string;
+    normalizeLocalText?: (text: string) => unknown;
   }): Promise<{ providerResult: AiModelResponseResult; parsed: unknown }> {
     const providerResult = await this.modelRouter.createResponse({
       workflow: input.workflow,
@@ -1369,6 +1370,17 @@ export class AiAssistantService {
       }
       return { providerResult, parsed: JSON.parse(outputText) };
     } catch (error) {
+      const outputText = this.responseOutputText(providerResult.response);
+      if (providerResult.provider === 'local-llm' && outputText && input.normalizeLocalText) {
+        return {
+          providerResult: {
+            ...providerResult,
+            fallbackReason: `Local LLM returned plain text for ${input.fallbackLabel}; normalized locally.`,
+          },
+          parsed: input.normalizeLocalText(outputText),
+        };
+      }
+
       if (providerResult.provider !== 'local-llm' || !this.modelRouter.canFallbackToOpenAI()) {
         throw error;
       }
@@ -1379,8 +1391,8 @@ export class AiAssistantService {
         payload: input.payload,
         forceProvider: 'openai',
       });
-      const outputText = this.responseOutputText(retryResult.response);
-      if (!outputText) {
+      const retryOutputText = this.responseOutputText(retryResult.response);
+      if (!retryOutputText) {
         throw new Error(`${input.fallbackLabel} OpenAI fallback response was empty.`);
       }
 
@@ -1392,13 +1404,31 @@ export class AiAssistantService {
             `Local LLM returned invalid structured output for ${input.fallbackLabel}: ${error instanceof Error ? error.message : String(error)}`,
           ].filter(Boolean).join(' / '),
         },
-        parsed: JSON.parse(outputText),
+        parsed: JSON.parse(retryOutputText),
       };
     }
   }
 
   private modeForProvider(providerResult: AiModelResponseResult): AiAssistantMode {
     return providerResult.provider === 'local-llm' ? 'local-llm' : 'openai';
+  }
+
+  private normalizeReadOnlyText(text: string): Partial<AiAssistantResult> {
+    const answer = text.trim();
+    const lines = answer
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^[-*•]\s*/, '').trim())
+      .filter(Boolean);
+
+    return {
+      answer,
+      highlights: lines.slice(0, 3),
+      suggestedQuestions: [
+        '이 내용으로 업무를 만들어줘',
+        '카카오톡으로 공유할 요약을 만들어줘',
+      ],
+      kakaoBrief: answer.length > 500 ? `${answer.slice(0, 497)}...` : answer,
+    };
   }
 
   private extractUsage(providerResult: AiModelResponseResult): AiAssistantUsageLog {
@@ -1996,6 +2026,7 @@ export class AiAssistantService {
         workflow: 'assistant',
         model,
         fallbackLabel: 'readonly assistant',
+        normalizeLocalText: (text) => this.normalizeReadOnlyText(text),
         payload: {
         model,
         ...this.responseCacheOptions(member, 'readonly-assistant', scope, model),

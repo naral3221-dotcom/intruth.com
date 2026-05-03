@@ -363,6 +363,8 @@ Zustand Store는 React 컴포넌트 외부에서 실행되므로 `@/di/storeRepo
 #### 로컬 우선 LLM Provider 및 OpenAI 폴백 구조 (Codex)
 - `AiModelProviderRouter`를 추가해 LM Studio, OpenClaw 등 OpenAI-compatible `/v1` endpoint를 AI Assistant/Agent/회의자료 생성의 1차 모델 Provider로 사용할 수 있게 구성
 - `LOCAL_LLM_*` 환경 변수로 assistant/agent/meeting 워크플로우별 로컬 모델, timeout, OpenAI 폴백 여부를 제어하도록 추가
+- Qwen 계열 로컬 모델의 장시간 reasoning으로 응답이 지연되지 않도록 로컬 호출 기본값에 `LOCAL_LLM_REASONING_EFFORT=none`, `LOCAL_LLM_MAX_OUTPUT_TOKENS` 제어를 추가
+- 읽기형 Assistant는 로컬 LLM이 JSON 스키마 대신 자연어 텍스트를 반환해도 답변/하이라이트/카카오 브리프 형태로 감싸 `local-llm` 실행 기록을 남기도록 보강
 - AI 명령/업무 초안/Tool Plan 생성에서 로컬 LLM 호출 실패 또는 구조화 JSON 실패 시 OpenAI로 자동 재시도하고, 실행 기록 usage에 provider/fallback 정보를 포함
 - 회의자료 요약 생성도 같은 Provider Router를 사용해 Qwen 로컬 모델과 OpenAI 모델을 동일한 API 경로에서 비교할 수 있도록 정리
 - `/api/ai/assistant/providers` 상태 API를 추가해 현재 OpenAI/로컬 설정, 로컬 `/models` probe 결과를 바로 확인할 수 있게 구현

@@ -227,6 +227,16 @@ export class AiModelProviderRouter {
     const payload: Record<string, unknown> = { ...call.payload, model };
     delete payload.prompt_cache_key;
     delete payload.prompt_cache_retention;
+
+    const reasoningEffort = cleanEnv(process.env.LOCAL_LLM_REASONING_EFFORT || 'none');
+    if (reasoningEffort && !payload.reasoning) {
+      payload.reasoning = { effort: reasoningEffort };
+    }
+
+    if (!payload.max_output_tokens) {
+      payload.max_output_tokens = envNumber('LOCAL_LLM_MAX_OUTPUT_TOKENS', 1800);
+    }
+
     return payload;
   }
 
