@@ -2,12 +2,12 @@
  * AI Assistant Service
  * 읽기 전용 사역 운영 비서
  */
-import OpenAI from 'openai';
 import { createHash } from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { ForbiddenError, ValidationError } from '../../shared/errors.js';
 import { ActivityLogService } from '../ActivityLogService.js';
 import { AgentToolPlanPreview, AgentToolRegistry } from './AgentToolRegistry.js';
+import { AiModelProviderRouter, AiModelResponseResult, AiModelWorkflow } from './AiModelProviderRouter.js';
 
 interface MemberContext {
   id: string;
@@ -26,6 +26,7 @@ type AiAssistantScopeType = 'GLOBAL' | 'PROJECT' | 'MEETING';
 type AiAgentActionStatus = 'PENDING_APPROVAL' | 'EXECUTED' | 'REJECTED' | 'FAILED';
 type AiAgentActionType = 'CREATE_TASKS' | 'TOOL_PLAN';
 type AiTaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+type AiAssistantMode = 'openai' | 'local' | 'local-llm';
 
 interface AiAssistantScope {
   type: AiAssistantScopeType;
@@ -36,7 +37,9 @@ interface AiAssistantScope {
 }
 
 interface AiAssistantUsageLog {
+  provider?: 'openai' | 'local' | 'local-llm' | null;
   model?: string | null;
+  fallbackReason?: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
   totalTokens?: number | null;
@@ -62,7 +65,7 @@ export interface AiAssistantResult {
     projects: number;
   };
   generatedAt: string;
-  mode: 'openai' | 'local';
+  mode: AiAssistantMode;
   usage?: AiAssistantUsageLog;
 }
 
@@ -363,9 +366,11 @@ export class AiAssistantService {
     private activityLogService: ActivityLogService
   ) {
     this.toolRegistry = new AgentToolRegistry(prisma, activityLogService);
+    this.modelRouter = new AiModelProviderRouter();
   }
 
   private readonly toolRegistry: AgentToolRegistry;
+  private readonly modelRouter: AiModelProviderRouter;
 
   private sanitizePrompt(prompt: string) {
     const normalized = prompt.replace(/\s+/g, ' ').trim();
@@ -1009,7 +1014,7 @@ export class AiAssistantService {
     context: Awaited<ReturnType<AiAssistantService['collectContext']>>;
     brief: string;
     tasks: AiTaskDraft[];
-    mode: 'openai' | 'local';
+    mode: AiAssistantMode;
   }): AiAssistantResult {
     const highlights = input.tasks.slice(0, 4).map((task) => {
       const due = task.dueDate ? ` / 마감 ${task.dueDate}` : '';
@@ -1062,7 +1067,7 @@ export class AiAssistantService {
     scope: AiAssistantScope;
     context: Awaited<ReturnType<AiAssistantService['collectContext']>>;
     preview: AgentToolPlanPreview;
-    mode: 'openai' | 'local';
+    mode: AiAssistantMode;
     usage: AiAssistantUsageLog;
   }): AiAssistantResult {
     const highlights = input.preview.tools.map((tool) => `${tool.label}: ${tool.summary}`);
@@ -1258,11 +1263,12 @@ export class AiAssistantService {
       kakaoBrief: run.kakaoBrief,
       sourceCounts: this.sourceCountsFromJson(run.sourceCounts),
       generatedAt: run.createdAt.toISOString(),
-      mode: run.mode === 'openai' ? 'openai' : 'local',
+      mode: ['openai', 'local-llm'].includes(run.mode) ? run.mode as AiAssistantMode : 'local',
       status: run.status === 'FAILED' ? 'FAILED' : 'COMPLETED',
       errorMessage: run.errorMessage,
       createdAt: run.createdAt.toISOString(),
       usage: {
+        provider: ['openai', 'local-llm'].includes(run.mode) ? run.mode as AiAssistantUsageLog['provider'] : 'local',
         model: (run as any).model,
         inputTokens: (run as any).inputTokens,
         outputTokens: (run as any).outputTokens,
@@ -1306,6 +1312,10 @@ export class AiAssistantService {
   }
 
   private estimateCostUsd(usage: AiAssistantUsageLog) {
+    if (usage.provider === 'local-llm' || usage.provider === 'local') {
+      return usage.provider === 'local-llm' ? 0 : null;
+    }
+
     const inputRate = Number(process.env.OPENAI_ASSISTANT_INPUT_COST_PER_1M || 0);
     const cachedInputRate = Number(process.env.OPENAI_ASSISTANT_CACHED_INPUT_COST_PER_1M || 0);
     const outputRate = Number(process.env.OPENAI_ASSISTANT_OUTPUT_COST_PER_1M || 0);
@@ -1324,12 +1334,82 @@ export class AiAssistantService {
     return Number((inputCost + outputCost).toFixed(6));
   }
 
-  private extractUsage(response: { model?: string | null; usage?: any }, model: string): AiAssistantUsageLog {
+  private responseOutputText(response: any) {
+    if (typeof response?.output_text === 'string') {
+      return response.output_text;
+    }
+
+    if (Array.isArray(response?.output)) {
+      return response.output
+        .flatMap((item: any) => Array.isArray(item?.content) ? item.content : [])
+        .map((item: any) => item?.text || item?.output_text || '')
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    return '';
+  }
+
+  private async createJsonResponse(input: {
+    workflow: AiModelWorkflow;
+    model: string;
+    payload: Record<string, unknown>;
+    fallbackLabel: string;
+  }): Promise<{ providerResult: AiModelResponseResult; parsed: unknown }> {
+    const providerResult = await this.modelRouter.createResponse({
+      workflow: input.workflow,
+      model: input.model,
+      payload: input.payload,
+    });
+
+    try {
+      const outputText = this.responseOutputText(providerResult.response);
+      if (!outputText) {
+        throw new Error(`${input.fallbackLabel} response was empty.`);
+      }
+      return { providerResult, parsed: JSON.parse(outputText) };
+    } catch (error) {
+      if (providerResult.provider !== 'local-llm' || !this.modelRouter.canFallbackToOpenAI()) {
+        throw error;
+      }
+
+      const retryResult = await this.modelRouter.createResponse({
+        workflow: input.workflow,
+        model: input.model,
+        payload: input.payload,
+        forceProvider: 'openai',
+      });
+      const outputText = this.responseOutputText(retryResult.response);
+      if (!outputText) {
+        throw new Error(`${input.fallbackLabel} OpenAI fallback response was empty.`);
+      }
+
+      return {
+        providerResult: {
+          ...retryResult,
+          fallbackReason: [
+            retryResult.fallbackReason,
+            `Local LLM returned invalid structured output for ${input.fallbackLabel}: ${error instanceof Error ? error.message : String(error)}`,
+          ].filter(Boolean).join(' / '),
+        },
+        parsed: JSON.parse(outputText),
+      };
+    }
+  }
+
+  private modeForProvider(providerResult: AiModelResponseResult): AiAssistantMode {
+    return providerResult.provider === 'local-llm' ? 'local-llm' : 'openai';
+  }
+
+  private extractUsage(providerResult: AiModelResponseResult): AiAssistantUsageLog {
+    const response = providerResult.response as { model?: string | null; usage?: any };
     const usage = response.usage;
     const result: AiAssistantUsageLog = {
-      model: response.model || model,
-      inputTokens: usage?.input_tokens ?? null,
-      outputTokens: usage?.output_tokens ?? null,
+      provider: providerResult.provider,
+      model: response.model || providerResult.model,
+      fallbackReason: providerResult.fallbackReason ?? null,
+      inputTokens: usage?.input_tokens ?? usage?.prompt_tokens ?? null,
+      outputTokens: usage?.output_tokens ?? usage?.completion_tokens ?? null,
       totalTokens: usage?.total_tokens ?? null,
       cachedTokens: usage?.input_tokens_details?.cached_tokens ?? usage?.prompt_tokens_details?.cached_tokens ?? null,
       reasoningTokens: usage?.output_tokens_details?.reasoning_tokens ?? null,
@@ -1389,7 +1469,13 @@ export class AiAssistantService {
         suggestedQuestions: [],
         kakaoBrief: '',
         sourceCounts,
-        mode: process.env.OPENAI_API_KEY ? 'openai' : 'local',
+        mode: usage.provider === 'local-llm'
+          ? 'local-llm'
+          : usage.provider === 'local'
+            ? 'local'
+            : this.modelRouter.hasConfiguredTextModel('assistant')
+              ? 'openai'
+              : 'local',
         model: usage.model,
         inputTokens: usage.inputTokens ?? undefined,
         outputTokens: usage.outputTokens ?? undefined,
@@ -1458,6 +1544,10 @@ export class AiAssistantService {
     return actions.map((action) => this.toAgentActionItem(action));
   }
 
+  async getProviderStatus() {
+    return this.modelRouter.getStatus({ probeLocal: true });
+  }
+
   async createTaskDraftAction(
     member: MemberContext,
     input: CreateAiTaskDraftActionInput
@@ -1480,24 +1570,25 @@ export class AiAssistantService {
       projects: context.projects.length,
     };
 
-    let mode: 'openai' | 'local' = 'local';
-    let usage: AiAssistantUsageLog = { model: 'local' };
+    let mode: AiAssistantMode = 'local';
+    let usage: AiAssistantUsageLog = { provider: 'local', model: 'local' };
     let draftResult: { brief: string; tasks: AiTaskDraft[] };
     const runPrompt = `업무 초안: ${prompt}`;
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
+    if (!this.modelRouter.hasConfiguredTextModel('assistant')) {
       draftResult = this.buildLocalTaskDrafts(prompt);
     } else {
       try {
-        mode = 'openai';
-        const openai = new OpenAI({ apiKey });
-        const model = process.env.OPENAI_ASSISTANT_MODEL || process.env.OPENAI_MEETING_MODEL || 'gpt-4o-mini';
+        const model = this.modelRouter.resolveOpenAIModel('assistant');
         const candidateLines = project.assigneeCandidates
           .map((candidate) => `- ${candidate.name} (${candidate.email})`)
           .join('\n') || '- 지정 가능한 담당자 없음';
 
-        const response = await openai.responses.create({
+        const { providerResult, parsed } = await this.createJsonResponse({
+          workflow: 'assistant',
+          model,
+          fallbackLabel: 'task draft',
+          payload: {
           model,
           ...this.responseCacheOptions(member, 'task-draft', scope, model),
           input: [
@@ -1531,10 +1622,12 @@ export class AiAssistantService {
               schema: AI_TASK_DRAFT_SCHEMA,
             },
           },
+          },
         });
 
-        usage = this.extractUsage(response, model);
-        draftResult = this.normalizeTaskDrafts(JSON.parse(response.output_text || '{}'), project.assigneeCandidates);
+        usage = this.extractUsage(providerResult);
+        mode = this.modeForProvider(providerResult);
+        draftResult = this.normalizeTaskDrafts(parsed, project.assigneeCandidates);
       } catch (error) {
         await this.recordFailure(member, runPrompt, scope, error, sourceCounts);
         throw error;
@@ -1605,21 +1698,22 @@ export class AiAssistantService {
       meetings: context.meetings.length,
       projects: context.projects.length,
     };
-    const apiKey = process.env.OPENAI_API_KEY;
     const runPrompt = `도구 실행 계획: ${prompt}`;
-    let mode: 'openai' | 'local' = 'local';
-    let usage: AiAssistantUsageLog = { model: 'local-tool-registry' };
+    let mode: AiAssistantMode = 'local';
+    let usage: AiAssistantUsageLog = { provider: 'local', model: 'local-tool-registry' };
     let preview: AgentToolPlanPreview;
 
-    if (!apiKey) {
+    if (!this.modelRouter.hasConfiguredTextModel('agent')) {
       preview = this.toolRegistry.buildLocalPlan(prompt, scope);
     } else {
       try {
-        mode = 'openai';
-        const openai = new OpenAI({ apiKey });
-        const model = process.env.OPENAI_AGENT_MODEL || process.env.OPENAI_ASSISTANT_MODEL || process.env.OPENAI_MEETING_MODEL || 'gpt-4o-mini';
+        const model = this.modelRouter.resolveOpenAIModel('agent');
         const now = new Date();
-        const response = await openai.responses.create({
+        const { providerResult, parsed } = await this.createJsonResponse({
+          workflow: 'agent',
+          model,
+          fallbackLabel: 'tool plan',
+          payload: {
           model,
           ...this.responseCacheOptions(member, 'tool-plan', scope, model),
           input: [
@@ -1656,10 +1750,12 @@ export class AiAssistantService {
               schema: AI_TOOL_PLAN_SCHEMA,
             },
           },
+          },
         });
 
-        usage = this.extractUsage(response, model);
-        preview = this.normalizeToolPlanDraft(JSON.parse(response.output_text || '{}'), prompt);
+        usage = this.extractUsage(providerResult);
+        mode = this.modeForProvider(providerResult);
+        preview = this.normalizeToolPlanDraft(parsed, prompt);
       } catch (error) {
         await this.recordFailure(member, runPrompt, scope, error, sourceCounts);
         throw error;
@@ -1890,15 +1986,17 @@ export class AiAssistantService {
       projects: context.projects.length,
     };
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return this.recordRun(member, prompt, scope, this.buildLocalAnswer(prompt, context), { model: 'local' });
+    if (!this.modelRouter.hasConfiguredTextModel('assistant')) {
+      return this.recordRun(member, prompt, scope, this.buildLocalAnswer(prompt, context), { provider: 'local', model: 'local' });
     }
 
     try {
-      const openai = new OpenAI({ apiKey });
-      const model = process.env.OPENAI_ASSISTANT_MODEL || process.env.OPENAI_MEETING_MODEL || 'gpt-4o-mini';
-      const response = await openai.responses.create({
+      const model = this.modelRouter.resolveOpenAIModel('assistant');
+      const { providerResult, parsed } = await this.createJsonResponse({
+        workflow: 'assistant',
+        model,
+        fallbackLabel: 'readonly assistant',
+        payload: {
         model,
         ...this.responseCacheOptions(member, 'readonly-assistant', scope, model),
         input: [
@@ -1928,25 +2026,26 @@ export class AiAssistantService {
             schema: AI_ASSISTANT_SCHEMA,
           },
         },
+        },
       });
 
-      const parsed = JSON.parse(response.output_text || '{}') as Partial<AiAssistantResult>;
-      const usage = this.extractUsage(response, model);
+      const normalized = parsed as Partial<AiAssistantResult>;
+      const usage = this.extractUsage(providerResult);
       return this.recordRun(member, prompt, scope, {
         scope: {
           type: scope.type,
           id: scope.id,
           label: scope.label,
         },
-        answer: String(parsed.answer || '').trim(),
-        highlights: Array.isArray(parsed.highlights) ? parsed.highlights.map(String).filter(Boolean).slice(0, 5) : [],
-        suggestedQuestions: Array.isArray(parsed.suggestedQuestions)
-          ? parsed.suggestedQuestions.map(String).filter(Boolean).slice(0, 4)
+        answer: String(normalized.answer || '').trim(),
+        highlights: Array.isArray(normalized.highlights) ? normalized.highlights.map(String).filter(Boolean).slice(0, 5) : [],
+        suggestedQuestions: Array.isArray(normalized.suggestedQuestions)
+          ? normalized.suggestedQuestions.map(String).filter(Boolean).slice(0, 4)
           : [],
-        kakaoBrief: String(parsed.kakaoBrief || parsed.answer || '').trim(),
+        kakaoBrief: String(normalized.kakaoBrief || normalized.answer || '').trim(),
         sourceCounts,
         generatedAt: new Date().toISOString(),
-        mode: 'openai',
+        mode: this.modeForProvider(providerResult),
       }, usage);
     } catch (error) {
       await this.recordFailure(member, prompt, scope, error, sourceCounts);

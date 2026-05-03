@@ -187,7 +187,8 @@
 │   └── ai/
 │       ├── AiTranscriptionService.ts  # 회의 녹음 업로드/전사/회의자료 생성
 │       ├── AiAssistantService.ts      # AI 명령 로그/메모리/승인 액션
-│       └── AgentToolRegistry.ts       # 승인 기반 프로젝트/회의/업무/팀/루틴 생성 도구
+│       ├── AgentToolRegistry.ts       # 승인 기반 프로젝트/회의/업무/팀/루틴 생성 도구
+│       └── AiModelProviderRouter.ts   # 로컬 LLM 우선/OpenAI 폴백 모델 Provider
 │
 ├── di/                            # 의존성 주입
 │   └── container.ts               # DI Container
@@ -325,6 +326,14 @@ OPENAI_MEETING_MODEL=gpt-4o-mini  # 회의자료 구조화 생성 모델
 OPENAI_ASSISTANT_MODEL=gpt-4o-mini  # AI 명령/Assistant 모델
 OPENAI_AGENT_MODEL=gpt-4o-mini  # AI 에이전트 Tool Plan 모델
 OPENAI_PROMPT_CACHE_RETENTION=      # 선택: in_memory|24h, 비우면 모델 기본값
+LOCAL_LLM_ENABLED=false             # 선택: LM Studio/OpenClaw 등 OpenAI-compatible 로컬 LLM 우선 사용
+LOCAL_LLM_BASE_URL=http://127.0.0.1:1234/v1
+LOCAL_LLM_MODEL=qwen3.6-27b
+LOCAL_LLM_TIMEOUT_MS=45000
+LOCAL_LLM_FALLBACK_TO_OPENAI=true   # 로컬 실패/구조화 출력 실패 시 OpenAI 폴백
+LOCAL_LLM_USE_FOR_ASSISTANT=true
+LOCAL_LLM_USE_FOR_AGENT=true
+LOCAL_LLM_USE_FOR_MEETING=true
 OPENAI_ASSISTANT_INPUT_COST_PER_1M= # 선택: 비용 추정용 일반 입력 단가
 OPENAI_ASSISTANT_CACHED_INPUT_COST_PER_1M= # 선택: 비용 추정용 캐시 입력 단가
 OPENAI_ASSISTANT_OUTPUT_COST_PER_1M= # 선택: 비용 추정용 출력 단가
@@ -379,6 +388,7 @@ OPENAI_ASSISTANT_OUTPUT_COST_PER_1M= # 선택: 비용 추정용 출력 단가
 - [x] AI 회의자료 초안 생성 및 회의 요약/액션아이템 반영
 - [x] AI 계정별 명령 로그/압축 메모리 및 프롬프트 캐시 키 기반 구축
 - [x] AI Agent Tool Registry 기반 승인 실행 계획 (프로젝트/회의자료/업무/팀 생성)
+- [x] 로컬 LLM 우선 모델 Provider 및 OpenAI 폴백 구조
 - [x] Team/TeamMember DB 기반 팀 API 및 회의자료 팀 연결
 - [x] RoutineTask DB 기반 루틴 업무 CRUD/완료 API 및 AI 루틴 생성 Tool Plan
 - [x] 회의자료 고유 링크 페이지(`/meetings/:meetingId`) 및 Notion형 문서 진입 구조

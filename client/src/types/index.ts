@@ -469,7 +469,9 @@ export interface AiAssistantScope {
 }
 
 export interface AiAssistantUsage {
+  provider?: 'openai' | 'local' | 'local-llm' | null;
   model?: string | null;
+  fallbackReason?: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
   totalTokens?: number | null;
@@ -491,7 +493,7 @@ export interface AiAssistantResult {
     projects: number;
   };
   generatedAt: string;
-  mode: 'openai' | 'local';
+  mode: 'openai' | 'local' | 'local-llm';
   usage?: AiAssistantUsage;
 }
 

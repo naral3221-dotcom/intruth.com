@@ -6,6 +6,7 @@ import OpenAI, { toFile } from 'openai';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors.js';
 import { IStorageService } from '../storage/IStorageService.js';
+import { AiModelProviderRouter } from './AiModelProviderRouter.js';
 
 type RecordingStatus = 'UPLOADED' | 'TRANSCRIBING' | 'TRANSCRIBED' | 'FAILED';
 type ActionItemPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
@@ -113,6 +114,7 @@ const MEETING_MATERIALS_SCHEMA = {
 
 export class AiTranscriptionService {
   private readonly RECORDING_FOLDER = 'meeting-recordings';
+  private readonly modelRouter = new AiModelProviderRouter();
 
   constructor(
     private prisma: PrismaClient,
@@ -401,6 +403,22 @@ export class AiTranscriptionService {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
+  private responseOutputText(response: any) {
+    if (typeof response?.output_text === 'string') {
+      return response.output_text;
+    }
+
+    if (Array.isArray(response?.output)) {
+      return response.output
+        .flatMap((item: any) => Array.isArray(item?.content) ? item.content : [])
+        .map((item: any) => item?.text || item?.output_text || '')
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    return '';
+  }
+
   private async createMaterialsWithOpenAI(input: {
     meetingTitle: string;
     meetingDate: Date;
@@ -409,54 +427,56 @@ export class AiTranscriptionService {
     existingSummary: string | null;
     transcript: string;
   }): Promise<MeetingMaterials> {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new ValidationError('OPENAI_API_KEY is not configured.');
+    if (!this.modelRouter.hasConfiguredTextModel('meeting')) {
+      throw new ValidationError('AI text provider is not configured.');
     }
 
-    const openai = new OpenAI({ apiKey });
-    const model = process.env.OPENAI_MEETING_MODEL || 'gpt-4o-mini';
-    const response = await openai.responses.create({
+    const model = this.modelRouter.resolveOpenAIModel('meeting');
+    const { response } = await this.modelRouter.createResponse({
+      workflow: 'meeting',
       model,
-      input: [
-        {
-          role: 'system',
-          content: [
-            'You create Korean church leadership meeting materials for INTRUTH.',
-            'Use a warm but concise ministry tone.',
-            'Extract only what is supported by the transcript.',
-            'Return an action item for every explicit commitment where someone agreed to do something.',
-            'Action item titles must be concrete and start with a verb-like task phrase.',
-            'Always write a non-empty one or two sentence summary.',
-            'If a due date or owner is unclear, return null for that field.',
-            'Do not invent private information or commitments.',
-          ].join(' '),
-        },
-        {
-          role: 'user',
-          content: [
-            `Meeting title: ${input.meetingTitle}`,
-            `Meeting date: ${input.meetingDate.toISOString()}`,
-            `Location: ${input.location || 'N/A'}`,
-            `Existing content: ${input.existingContent || 'N/A'}`,
-            `Existing summary: ${input.existingSummary || 'N/A'}`,
-            'Transcript:',
-            input.transcript,
-          ].join('\n\n'),
-        },
-      ],
-      text: {
-        verbosity: 'medium',
-        format: {
-          type: 'json_schema',
-          name: 'intruth_meeting_materials',
-          strict: true,
-          schema: MEETING_MATERIALS_SCHEMA,
+      payload: {
+        model,
+        input: [
+          {
+            role: 'system',
+            content: [
+              'You create Korean church leadership meeting materials for INTRUTH.',
+              'Use a warm but concise ministry tone.',
+              'Extract only what is supported by the transcript.',
+              'Return an action item for every explicit commitment where someone agreed to do something.',
+              'Action item titles must be concrete and start with a verb-like task phrase.',
+              'Always write a non-empty one or two sentence summary.',
+              'If a due date or owner is unclear, return null for that field.',
+              'Do not invent private information or commitments.',
+            ].join(' '),
+          },
+          {
+            role: 'user',
+            content: [
+              `Meeting title: ${input.meetingTitle}`,
+              `Meeting date: ${input.meetingDate.toISOString()}`,
+              `Location: ${input.location || 'N/A'}`,
+              `Existing content: ${input.existingContent || 'N/A'}`,
+              `Existing summary: ${input.existingSummary || 'N/A'}`,
+              'Transcript:',
+              input.transcript,
+            ].join('\n\n'),
+          },
+        ],
+        text: {
+          verbosity: 'medium',
+          format: {
+            type: 'json_schema',
+            name: 'intruth_meeting_materials',
+            strict: true,
+            schema: MEETING_MATERIALS_SCHEMA,
+          },
         },
       },
     });
 
-    const outputText = response.output_text;
+    const outputText = this.responseOutputText(response);
     if (!outputText) {
       throw new ValidationError('AI meeting materials were empty.');
     }

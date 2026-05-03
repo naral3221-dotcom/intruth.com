@@ -298,6 +298,17 @@ router.get('/assistant/actions', authenticate, async (req: AuthRequest, res: Res
   }
 });
 
+router.get('/assistant/providers', authenticate, async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const service = getAiAssistantService();
+    const status = await service.getProviderStatus();
+    res.json(status);
+  } catch (error) {
+    const { statusCode, body } = handleError(error);
+    res.status(statusCode).json(body);
+  }
+});
+
 router.post(
   '/assistant/task-drafts',
   authenticate,
