@@ -153,6 +153,39 @@ export class AgentToolRegistry {
     return Number.isNaN(parsed.getTime()) ? null : raw;
   }
 
+  private normalizePersonName(value: unknown) {
+    return String(value || '')
+      .replace(/\s+/g, '')
+      .replace(/님|목사|전도사|간사|리더|팀장/g, '')
+      .toLowerCase();
+  }
+
+  private matchAssigneeId(
+    assigneeName: string | null | undefined,
+    candidates: Array<{ id: string; name: string; email: string; username: string | null }>
+  ) {
+    const normalizedName = this.normalizePersonName(assigneeName);
+    if (!normalizedName) return null;
+
+    const normalizedCandidates = candidates.map((candidate) => ({
+      id: candidate.id,
+      names: [
+        candidate.name,
+        candidate.username,
+        candidate.email?.split('@')[0],
+      ].map((value) => this.normalizePersonName(value)).filter(Boolean),
+    }));
+
+    const exact = normalizedCandidates.find((candidate) => candidate.names.includes(normalizedName));
+    if (exact) return exact.id;
+
+    const partial = normalizedCandidates.find((candidate) =>
+      candidate.names.some((name) => name.includes(normalizedName) || normalizedName.includes(name))
+    );
+
+    return partial?.id || null;
+  }
+
   private parseMeetingDate(prompt: string) {
     const now = new Date();
     const explicit = prompt.match(/(20\d{2})[-./년\s]+(\d{1,2})[-./월\s]+(\d{1,2})/);
@@ -369,7 +402,13 @@ export class AgentToolRegistry {
         id: true,
         name: true,
         ownerId: true,
-        members: { select: { memberId: true } },
+        owner: { select: { id: true, name: true, email: true, username: true, isActive: true } },
+        members: {
+          select: {
+            memberId: true,
+            member: { select: { id: true, name: true, email: true, username: true, isActive: true } },
+          },
+        },
       },
     });
 
@@ -478,11 +517,13 @@ export class AgentToolRegistry {
     const taskDrafts = Array.isArray(tool.args.tasks) ? tool.args.tasks : [];
     if (taskDrafts.length === 0) throw new ValidationError('생성할 업무가 없습니다.');
 
-    const validMemberIds = await this.prisma.member.findMany({
-      where: { id: { in: taskDrafts.map((task) => task.assigneeId).filter(Boolean) as string[] }, isActive: true },
-      select: { id: true },
-    });
-    const validMemberIdSet = new Set(validMemberIds.map((memberRow) => memberRow.id));
+    const assigneeCandidates = [
+      project.owner,
+      ...project.members.map((item) => item.member),
+    ]
+      .filter((candidate) => candidate.isActive)
+      .filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
+    const validMemberIdSet = new Set(assigneeCandidates.map((candidate) => candidate.id));
 
     return this.prisma.$transaction(async (tx) => {
       const lastTask = await tx.task.findFirst({
@@ -497,6 +538,9 @@ export class AgentToolRegistry {
         const title = compactWhitespace(String(draft.title || ''));
         if (!title) continue;
         nextOrder += 1;
+        const assigneeId = draft.assigneeId && validMemberIdSet.has(draft.assigneeId)
+          ? draft.assigneeId
+          : this.matchAssigneeId(draft.assigneeName, assigneeCandidates);
 
         const task = await tx.task.create({
           data: {
@@ -504,7 +548,7 @@ export class AgentToolRegistry {
             title: title.slice(0, 160),
             description: draft.description ? String(draft.description).slice(0, 2000) : null,
             priority: this.normalizePriority(draft.priority),
-            assigneeId: draft.assigneeId && validMemberIdSet.has(draft.assigneeId) ? draft.assigneeId : undefined,
+            assigneeId: assigneeId || undefined,
             reporterId: member.id,
             dueDate: this.parseDueDate(draft.dueDate) ? new Date(`${this.parseDueDate(draft.dueDate)}T00:00:00.000Z`) : undefined,
             order: nextOrder,

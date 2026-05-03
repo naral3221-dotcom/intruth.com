@@ -197,6 +197,90 @@ const AI_TASK_DRAFT_SCHEMA = {
   },
 } as const;
 
+const AI_TOOL_PLAN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['brief', 'tools'],
+  properties: {
+    brief: { type: 'string' },
+    tools: {
+      type: 'array',
+      minItems: 0,
+      maxItems: 8,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['toolName', 'label', 'summary', 'args'],
+        properties: {
+          toolName: {
+            type: 'string',
+            enum: ['create_project', 'create_meeting', 'create_tasks', 'create_team'],
+          },
+          label: { type: 'string' },
+          summary: { type: 'string' },
+          args: {
+            type: 'object',
+            additionalProperties: false,
+            required: [
+              'title',
+              'description',
+              'projectId',
+              'projectName',
+              'teamId',
+              'teamName',
+              'meetingDate',
+              'content',
+              'color',
+              'tasks',
+              'agendas',
+            ],
+            properties: {
+              title: { type: ['string', 'null'] },
+              description: { type: ['string', 'null'] },
+              projectId: { type: ['string', 'null'] },
+              projectName: { type: ['string', 'null'] },
+              teamId: { type: ['string', 'null'] },
+              teamName: { type: ['string', 'null'] },
+              meetingDate: { type: ['string', 'null'], description: 'ISO date-time only when explicitly clear, otherwise null' },
+              content: { type: ['string', 'null'] },
+              color: { type: ['string', 'null'] },
+              tasks: {
+                type: 'array',
+                maxItems: 8,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['title', 'description', 'priority', 'dueDate', 'assigneeName'],
+                  properties: {
+                    title: { type: 'string' },
+                    description: { type: ['string', 'null'] },
+                    priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] },
+                    dueDate: { type: ['string', 'null'], description: 'YYYY-MM-DD when explicitly clear, otherwise null' },
+                    assigneeName: { type: ['string', 'null'] },
+                  },
+                },
+              },
+              agendas: {
+                type: 'array',
+                maxItems: 10,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['title', 'description'],
+                  properties: {
+                    title: { type: 'string' },
+                    description: { type: ['string', 'null'] },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
 const TASK_PRIORITIES = new Set<AiTaskPriority>(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
 
 export class AiAssistantService {
@@ -517,6 +601,26 @@ export class AiAssistantService {
       'Use YYYY-MM-DD due dates only when the date is explicit or very clear.',
       'Use assignee names only from the candidate list; use null when uncertain.',
     ].join('\n');
+  }
+
+  private staticToolPlanInstructions() {
+    return [
+      'You are INTRUTH AI, a Korean church leadership operations agent planner.',
+      'Your job is to translate the user request into a small approval-required tool plan for the INTRUTH server.',
+      'Never claim that data has already been created or changed. The server will only execute after human approval.',
+      'Use only the listed server tools. Do not invent tool names, external integrations, hidden actions, or background jobs.',
+      'Prefer the fewest useful tools. When a request needs both a project and tasks but no target project is clear, create the project first, then create_tasks without projectId so the server can chain it.',
+      'Use current INTRUTH context and saved account memory only as grounding, not as permission to perform unrelated changes.',
+      'Dates must be explicit. For relative Korean dates, resolve them against the provided Asia/Seoul current date and use ISO date-time for meetings or YYYY-MM-DD for tasks.',
+      'If the user asks for advice, brainstorming, or a read-only answer instead of a concrete write action, return an empty tools array.',
+    ].join('\n');
+  }
+
+  private toolCatalogText() {
+    return this.toolRegistry
+      .listTools()
+      .map((tool) => `- ${tool.name}: ${tool.description} Approval required: ${tool.approvalRequired ? 'yes' : 'no'}`)
+      .join('\n');
   }
 
   private async collectAccountMemory(member: MemberContext, scope: AiAssistantScope): Promise<AiAccountMemoryContext> {
@@ -855,6 +959,59 @@ export class AiAssistantService {
       },
       generatedAt: new Date().toISOString(),
       mode: input.mode,
+    };
+  }
+
+  private normalizeToolPlanDraft(value: unknown, prompt: string): AgentToolPlanPreview {
+    const data = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+    const tools = Array.isArray(data.tools) ? data.tools : [];
+
+    return this.toolRegistry.toToolPlanPreview({
+      type: 'TOOL_PLAN',
+      prompt,
+      brief: String(data.brief || 'AI 에이전트 실행 계획입니다.').trim().slice(0, 500),
+      tools,
+      generatedAt: new Date().toISOString(),
+    });
+  }
+
+  private buildToolPlanAssistantResult(input: {
+    scope: AiAssistantScope;
+    context: Awaited<ReturnType<AiAssistantService['collectContext']>>;
+    preview: AgentToolPlanPreview;
+    mode: 'openai' | 'local';
+    usage: AiAssistantUsageLog;
+  }): AiAssistantResult {
+    const highlights = input.preview.tools.map((tool) => `${tool.label}: ${tool.summary}`);
+
+    return {
+      scope: {
+        type: input.scope.type,
+        id: input.scope.id,
+        label: input.scope.label,
+      },
+      answer: [
+        input.preview.brief,
+        '',
+        ...highlights.map((item) => `- ${item}`),
+        '',
+        '승인하면 INTRUTH 서버 도구가 권한을 확인한 뒤 실제 데이터로 생성합니다.',
+      ].join('\n'),
+      highlights,
+      suggestedQuestions: [
+        '승인 대기 보여줘',
+        '업무 보드로 이동',
+        '회의자료로 이동',
+      ],
+      kakaoBrief: `[INTRUTH AI 실행 계획]\n${highlights.map((item) => `- ${item}`).join('\n')}`,
+      sourceCounts: {
+        tasks: input.context.tasks.length,
+        meetings: input.context.meetings.length,
+        projects: input.context.projects.length,
+      },
+      generatedAt: new Date().toISOString(),
+      mode: input.mode,
+      usage: input.usage,
     };
   }
 
@@ -1356,40 +1513,89 @@ export class AiAssistantService {
   ): Promise<CreateAiToolPlanActionResult> {
     const prompt = this.sanitizePrompt(input.prompt);
     const scope = await this.resolveScope(member, input.scope);
-    const context = await this.collectContext(member, scope);
+    const [context, accountMemory] = await Promise.all([
+      this.collectContext(member, scope),
+      this.collectAccountMemory(member, scope),
+    ]);
     const sourceCounts = {
       tasks: context.tasks.length,
       meetings: context.meetings.length,
       projects: context.projects.length,
     };
-    const preview = this.toolRegistry.buildLocalPlan(prompt, scope);
-    const highlights = preview.tools.map((tool) => `${tool.label}: ${tool.summary}`);
-    const result: AiAssistantResult = {
-      scope: {
-        type: scope.type,
-        id: scope.id,
-        label: scope.label,
-      },
-      answer: [
-        preview.brief,
-        '',
-        ...highlights.map((item) => `- ${item}`),
-        '',
-        '승인하면 INTRUTH 서버 도구가 권한을 확인한 뒤 실제 데이터로 생성합니다.',
-      ].join('\n'),
-      highlights,
-      suggestedQuestions: [
-        '승인 대기 보여줘',
-        '업무 보드로 이동',
-        '회의자료로 이동',
-      ],
-      kakaoBrief: `[INTRUTH AI 실행 계획]\n${highlights.map((item) => `- ${item}`).join('\n')}`,
-      sourceCounts,
-      generatedAt: new Date().toISOString(),
-      mode: 'local',
-      usage: { model: 'local-tool-registry' },
-    };
-    const assistant = await this.recordRun(member, `도구 실행 계획: ${prompt}`, scope, result, { model: 'local-tool-registry' });
+    const apiKey = process.env.OPENAI_API_KEY;
+    const runPrompt = `도구 실행 계획: ${prompt}`;
+    let mode: 'openai' | 'local' = 'local';
+    let usage: AiAssistantUsageLog = { model: 'local-tool-registry' };
+    let preview: AgentToolPlanPreview;
+
+    if (!apiKey) {
+      preview = this.toolRegistry.buildLocalPlan(prompt, scope);
+    } else {
+      try {
+        mode = 'openai';
+        const openai = new OpenAI({ apiKey });
+        const model = process.env.OPENAI_AGENT_MODEL || process.env.OPENAI_ASSISTANT_MODEL || process.env.OPENAI_MEETING_MODEL || 'gpt-4o-mini';
+        const now = new Date();
+        const response = await openai.responses.create({
+          model,
+          ...this.responseCacheOptions(member, 'tool-plan', scope, model),
+          input: [
+            {
+              role: 'system',
+              content: this.staticToolPlanInstructions(),
+            },
+            {
+              role: 'user',
+              content: [
+                'Available INTRUTH server tools:',
+                this.toolCatalogText(),
+                '',
+                `현재 기준 시각: ${now.toISOString()}`,
+                '서비스 시간대: Asia/Seoul',
+                `사용자 요청: ${prompt}`,
+                `명령 범위: ${scope.label} (${scope.type})`,
+                scope.projectId ? `현재 프로젝트 ID: ${scope.projectId}` : '현재 프로젝트 ID: 없음',
+                scope.meetingId ? `현재 회의 ID: ${scope.meetingId}` : '현재 회의 ID: 없음',
+                '',
+                'Saved account memory:',
+                this.toAccountMemoryText(accountMemory),
+                '',
+                '현재 INTRUTH 컨텍스트:',
+                this.toContextText(context),
+              ].join('\n'),
+            },
+          ],
+          text: {
+            format: {
+              type: 'json_schema',
+              name: 'intruth_tool_plan',
+              strict: true,
+              schema: AI_TOOL_PLAN_SCHEMA,
+            },
+          },
+        });
+
+        usage = this.extractUsage(response, model);
+        preview = this.normalizeToolPlanDraft(JSON.parse(response.output_text || '{}'), prompt);
+      } catch (error) {
+        await this.recordFailure(member, runPrompt, scope, error, sourceCounts);
+        throw error;
+      }
+    }
+
+    const assistant = await this.recordRun(
+      member,
+      runPrompt,
+      scope,
+      this.buildToolPlanAssistantResult({
+        scope,
+        context,
+        preview,
+        mode,
+        usage,
+      }),
+      usage
+    );
     const storedPreview: AgentToolPlanPreview = {
       ...preview,
       sourceRunId: assistant.runId,

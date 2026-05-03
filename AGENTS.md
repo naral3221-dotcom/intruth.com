@@ -322,6 +322,7 @@ OPENAI_TRANSCRIBE_MODEL=gpt-4o-transcribe  # 전사 모델
 OPENAI_TRANSCRIBE_PROMPT=      # 한국어/교회 용어 전사용 추가 문맥
 OPENAI_MEETING_MODEL=gpt-4o-mini  # 회의자료 구조화 생성 모델
 OPENAI_ASSISTANT_MODEL=gpt-4o-mini  # AI 명령/Assistant 모델
+OPENAI_AGENT_MODEL=gpt-4o-mini  # AI 에이전트 Tool Plan 모델
 OPENAI_PROMPT_CACHE_RETENTION=      # 선택: in_memory|24h, 비우면 모델 기본값
 OPENAI_ASSISTANT_INPUT_COST_PER_1M= # 선택: 비용 추정용 일반 입력 단가
 OPENAI_ASSISTANT_CACHED_INPUT_COST_PER_1M= # 선택: 비용 추정용 캐시 입력 단가
